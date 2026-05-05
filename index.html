@@ -1,0 +1,3682 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>광주SRF 시공 관리 시스템</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Firebase SDK (compat mode for simplicity) - Firestore + Auth only, no Storage -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+  :root {
+    --bg: #F4F1EA;
+    --surface: #FFFFFF;
+    --surface-2: #FAF8F2;
+    --ink: #14161A;
+    --ink-2: #3C4148;
+    --ink-3: #6B7079;
+    --line: #DDD6C4;
+    --line-2: #C4BBA4;
+    --accent: #E8B923;
+    --accent-2: #C99A0E;
+    --accent-soft: #FBF1C7;
+    --danger: #B83A2A;
+    --success: #2D7A47;
+    --info: #1F4E79;
+    --shadow-sm: 0 1px 2px rgba(20,22,26,0.06);
+    --shadow-md: 0 4px 16px rgba(20,22,26,0.10);
+    --shadow-lg: 0 16px 48px rgba(20,22,26,0.18);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    background-image:
+      linear-gradient(rgba(20,22,26,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20,22,26,0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: 'ss01', 'ss02'; }
+
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, textarea, select { font-family: inherit; color: inherit; }
+
+  /* ==================== LAYOUT ==================== */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  .topbar {
+    display: flex; align-items: stretch;
+    background: var(--ink);
+    color: #F4F1EA;
+    border-bottom: 3px solid var(--accent);
+    flex-shrink: 0;
+  }
+  .topbar__brand {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 24px;
+    border-right: 1px solid rgba(244,241,234,0.08);
+  }
+  .topbar__mark {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    color: var(--ink);
+    display: grid; place-items: center;
+    font-weight: 900; font-size: 14px;
+    letter-spacing: -0.02em;
+    transform: rotate(-4deg);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .topbar__title {
+    line-height: 1.15;
+  }
+  .topbar__title h1 {
+    margin: 0; font-size: 16px; font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .topbar__title small {
+    font-size: 11px; opacity: 0.6;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .topbar__meta {
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 24px;
+    flex: 1;
+    font-size: 12px; color: rgba(244,241,234,0.7);
+  }
+  .topbar__meta-item { display: flex; gap: 8px; align-items: center; }
+  .topbar__meta-item b { color: #F4F1EA; font-weight: 500; }
+  .topbar__actions { display: flex; }
+  .topbar__btn {
+    padding: 0 20px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 500;
+    border-left: 1px solid rgba(244,241,234,0.08);
+    color: rgba(244,241,234,0.85);
+    transition: background 0.15s;
+  }
+  .topbar__btn:hover { background: rgba(244,241,234,0.06); color: #F4F1EA; }
+  .topbar__btn.is-active {
+    background: var(--accent);
+    color: var(--ink);
+  }
+
+  .main { flex: 1; display: flex; min-height: 0; }
+
+  .map-pane {
+    flex: 1; position: relative;
+    background: var(--ink-2);
+    border-right: 1px solid var(--line);
+  }
+  #map { width: 100%; height: 100%; background: #1f2226; }
+
+  .map-corner {
+    position: absolute; top: 14px; left: 60px;
+    z-index: 500;
+    background: rgba(20,22,26,0.92);
+    backdrop-filter: blur(8px);
+    color: #F4F1EA;
+    padding: 10px 14px;
+    border-left: 3px solid var(--accent);
+    font-size: 11px;
+    box-shadow: var(--shadow-md);
+    max-width: 320px;
+  }
+  .map-corner strong { display: block; font-size: 12px; margin-bottom: 2px; }
+  .map-corner span { opacity: 0.7; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+
+  .legend {
+    position: absolute; bottom: 14px; left: 14px;
+    z-index: 500;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(8px);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-md);
+    border-top: 2px solid var(--accent);
+    font-size: 11px;
+    max-width: 220px;
+  }
+  .legend strong { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 8px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--ink-2); }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); }
+
+  /* ==================== SIDEBAR ==================== */
+  .sidebar {
+    width: 380px; flex-shrink: 0;
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--line);
+  }
+  .sidebar__header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .sidebar__title {
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .sidebar__title h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .sidebar__title .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-3);
+    background: var(--bg); padding: 2px 8px;
+    border: 1px solid var(--line);
+  }
+  .sidebar__hint { margin: 6px 0 0; font-size: 11px; color: var(--ink-3); line-height: 1.5; }
+
+  .sidebar__list {
+    flex: 1; overflow-y: auto; padding: 8px 0;
+  }
+  .sidebar__list::-webkit-scrollbar { width: 8px; }
+  .sidebar__list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+
+  .category {
+    border-bottom: 1px solid var(--line);
+  }
+  .category__head {
+    padding: 14px 20px 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .category__name {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .category__num {
+    width: 22px; height: 22px;
+    background: var(--ink); color: #F4F1EA;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+  }
+  .category__actions { display: flex; gap: 4px; }
+  .icon-btn {
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    color: var(--ink-3);
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--bg); color: var(--ink); }
+  .icon-btn.danger:hover { background: #FCEAE6; color: var(--danger); }
+
+  .facilities { padding: 0 12px 12px; }
+  .facility {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .facility:hover { background: var(--surface-2); }
+  .facility.is-active { background: var(--accent-soft); }
+  .facility__num {
+    flex-shrink: 0;
+    min-width: 36px; height: 26px; padding: 0 6px;
+    background: var(--accent); color: var(--ink);
+    border: 1.5px solid var(--ink);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+  .facility__name { flex: 1; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+  .facility__count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--ink-3);
+    background: var(--bg); padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 20px; text-align: center;
+  }
+  .facility__count.has-photos { background: var(--ink); color: var(--accent); }
+  .facility__actions {
+    display: none; gap: 2px;
+    position: absolute; right: 8px;
+    background: var(--surface-2);
+    padding: 2px 4px; border-radius: 4px;
+  }
+  .facility:hover .facility__actions.edit-mode { display: flex; }
+
+  .add-facility-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: calc(100% - 24px); margin: 4px 12px;
+    padding: 10px;
+    border: 1.5px dashed var(--line-2);
+    border-radius: 6px;
+    color: var(--ink-3);
+    font-size: 12px; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .add-facility-btn:hover {
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+    background: var(--accent-soft);
+  }
+
+  .add-category-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    width: calc(100% - 32px); margin: 12px 16px;
+    padding: 14px;
+    border: 1.5px dashed var(--ink-3);
+    border-radius: 6px;
+    color: var(--ink-2);
+    font-size: 13px; font-weight: 600;
+    transition: all 0.15s;
+  }
+  .add-category-btn:hover {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--accent);
+  }
+
+  /* ==================== MAP MARKERS ==================== */
+  .marker-pin {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    color: var(--ink);
+    border: 2.5px solid var(--ink);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    box-shadow: 2px 2px 0 var(--ink), var(--shadow-md);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .marker-pin:hover { transform: scale(1.15); z-index: 1000; }
+  .marker-pin.has-photos {
+    background: var(--ink);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .marker-pin.is-active {
+    background: var(--danger);
+    color: white;
+    border-color: var(--ink);
+    transform: scale(1.2);
+    z-index: 1000;
+  }
+
+  /* ==================== MODAL ==================== */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(20,22,26,0.6);
+    backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 9999;
+    padding: 24px;
+  }
+  .modal-backdrop.is-open { display: flex; }
+  .modal {
+    background: var(--surface);
+    width: 100%; max-width: 880px;
+    max-height: 90vh;
+    display: flex; flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    border-top: 4px solid var(--accent);
+  }
+  .modal--sm { max-width: 480px; }
+  .modal__head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .modal__title { display: flex; align-items: center; gap: 12px; }
+  .modal__title-num {
+    background: var(--accent); color: var(--ink);
+    border: 2px solid var(--ink);
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 700;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .modal__title h3 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+  .modal__title small { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .modal__close {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    color: var(--ink-3);
+    transition: all 0.15s;
+  }
+  .modal__close:hover { background: var(--bg); color: var(--ink); }
+  .modal__body { padding: 24px; overflow-y: auto; flex: 1; }
+  .modal__foot {
+    padding: 16px 24px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-2);
+    display: flex; justify-content: flex-end; gap: 10px;
+  }
+
+  /* ==================== FORMS ==================== */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 600;
+    color: var(--ink-2);
+    letter-spacing: 0.05em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .field input[type="text"],
+  .field input[type="date"],
+  .field textarea,
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    font-size: 13px;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+  }
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--accent-2);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field textarea { resize: vertical; min-height: 60px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Buttons */
+  .btn {
+    padding: 9px 16px;
+    border-radius: 4px;
+    font-size: 12px; font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn--primary {
+    background: var(--ink); color: var(--accent);
+    border: 1.5px solid var(--ink);
+  }
+  .btn--primary:hover { background: #2A2D33; }
+  .btn--accent {
+    background: var(--accent); color: var(--ink);
+    border: 1.5px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .btn--accent:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 var(--ink); }
+  .btn--ghost {
+    background: transparent; color: var(--ink-2);
+    border: 1.5px solid var(--line-2);
+  }
+  .btn--ghost:hover { background: var(--bg); border-color: var(--ink); color: var(--ink); }
+  .btn--danger { background: transparent; color: var(--danger); border: 1.5px solid #E5C2BD; }
+  .btn--danger:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+  /* Photo gallery */
+  .upload-zone {
+    border: 2px dashed var(--line-2);
+    border-radius: 6px;
+    padding: 24px;
+    text-align: center;
+    background: var(--surface-2);
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .upload-zone:hover {
+    border-color: var(--accent-2);
+    background: var(--accent-soft);
+  }
+  .upload-zone.is-drag { border-color: var(--accent-2); background: var(--accent-soft); }
+  .upload-zone__icon { font-size: 28px; margin-bottom: 6px; }
+  .upload-zone__text { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .upload-zone__hint { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
+
+  .photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .photo-card {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    transition: transform 0.15s;
+    cursor: pointer;
+    position: relative;
+  }
+  .photo-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .photo-card__delete {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 28px; height: 28px;
+    background: rgba(20,22,26,0.75);
+    backdrop-filter: blur(4px);
+    color: white;
+    border: 0;
+    border-radius: 50%;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, transform 0.15s;
+    z-index: 2;
+    display: grid; place-items: center;
+  }
+  .photo-card:hover .photo-card__delete { opacity: 1; }
+  .photo-card__delete:hover {
+    background: var(--danger);
+    transform: scale(1.1);
+  }
+  /* Always-visible on touch devices (no hover) */
+  @media (hover: none) {
+    .photo-card__delete { opacity: 1; }
+  }
+  .photo-card__img {
+    width: 100%; aspect-ratio: 4/3;
+    object-fit: cover;
+    background: var(--bg);
+    display: block;
+  }
+  .photo-card__img--pdf {
+    display: grid; place-items: center;
+    font-size: 48px;
+    color: var(--ink-3);
+    background: linear-gradient(135deg, #FAF8F2 0%, #E5E1D8 100%);
+  }
+  .photo-card__meta {
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+  }
+  .photo-card__date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--ink-2);
+    font-weight: 600;
+  }
+  .photo-card__filename {
+    font-size: 12px; color: var(--ink);
+    font-weight: 600;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .photo-card__desc {
+    font-size: 11px; color: var(--ink-3);
+    margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .photo-card__author {
+    font-size: 10px; color: var(--ink-3);
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  .empty-state {
+    text-align: center; padding: 40px 20px;
+    color: var(--ink-3);
+    font-size: 13px;
+  }
+  .empty-state__title { font-size: 14px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+
+  /* ==================== SHARE GUIDE MODAL ==================== */
+  .share-url-card {
+    background: linear-gradient(135deg, #14161A 0%, #2A2D33 100%);
+    color: #F4F1EA;
+    border-radius: 8px;
+    padding: 18px 20px;
+    border: 1px solid var(--ink);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    position: relative;
+  }
+  .share-url-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+  }
+  .share-url-card__label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .share-url-card__live-dot {
+    width: 8px; height: 8px;
+    background: #4ADE80;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 0 0 rgba(74,222,128,0.7);
+  }
+  .share-url-card__body {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+    align-items: center;
+  }
+  .share-url-card__url-block {
+    min-width: 0;
+  }
+  .share-url-card__url {
+    background: rgba(244,241,234,0.08);
+    color: #F4F1EA;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    word-break: break-all;
+    border: 1px solid rgba(244,241,234,0.1);
+    margin-bottom: 12px;
+    line-height: 1.5;
+    user-select: all;
+  }
+  .share-url-card__buttons {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .share-url-card__buttons .btn {
+    flex: 1;
+    justify-content: center;
+    min-width: 130px;
+  }
+  .share-url-card__hint {
+    margin: 12px 0 0;
+    font-size: 11.5px;
+    color: rgba(244,241,234,0.65);
+    line-height: 1.6;
+  }
+  .share-url-card__qr {
+    background: white;
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    flex-shrink: 0;
+    width: 160px;
+    position: relative;
+  }
+  .share-url-card__qr img {
+    width: 140px; height: 140px;
+    display: block; margin: 0 auto;
+  }
+  .share-url-card__qr-fallback {
+    display: none;
+    width: 140px; height: 140px;
+    margin: 0 auto;
+    background: #f3f3f3;
+    color: #999;
+    font-size: 11px;
+    align-items: center; justify-content: center;
+  }
+  .share-url-card__qr.is-error img { display: none; }
+  .share-url-card__qr.is-error .share-url-card__qr-fallback { display: flex; }
+  .share-url-card__qr-label {
+    font-size: 10.5px;
+    color: var(--ink-2);
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  /* Mobile: stack URL block above QR */
+  @media (max-width: 600px) {
+    .share-url-card__body {
+      grid-template-columns: 1fr;
+    }
+    .share-url-card__qr {
+      width: 100%;
+      max-width: 200px;
+      margin: 0 auto;
+    }
+  }
+
+  .share-method {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 14px;
+    background: var(--surface-2);
+  }
+  .share-method__head {
+    display: flex; gap: 12px; align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .share-method__num {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    background: var(--ink); color: var(--accent);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; font-weight: 700;
+    border-radius: 50%;
+  }
+  .share-method__head h4 {
+    margin: 0 0 4px; font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .share-method__head p {
+    margin: 0; font-size: 12px; color: var(--ink-3);
+  }
+  .share-method__tag {
+    font-size: 10px; font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+  }
+  .share-method__tag--easy {
+    background: var(--accent-soft);
+    color: var(--accent-2);
+  }
+  .share-method__tag--free {
+    background: #DCEFE0;
+    color: var(--success);
+  }
+  .share-method__steps {
+    margin: 0; padding-left: 28px;
+    font-size: 12.5px; color: var(--ink-2);
+    line-height: 1.7;
+  }
+  .share-method__steps li { margin-bottom: 3px; }
+  .share-method__steps a { color: var(--info); font-weight: 600; }
+  .share-method__hint {
+    margin: 10px 0 0;
+    padding: 8px 12px;
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent-2);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .share-warning {
+    display: flex; gap: 12px;
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: #FCEAE6;
+    border-left: 4px solid var(--danger);
+    border-radius: 0 4px 4px 0;
+  }
+  .share-warning__icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    line-height: 1.3;
+  }
+  .share-warning strong {
+    display: block;
+    font-size: 13px;
+    color: var(--danger);
+    margin-bottom: 6px;
+  }
+  .share-warning p {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+  .share-warning p:last-child { margin-bottom: 0; }
+
+  /* ==================== PDF VIEWER ==================== */
+  .lightbox {
+    position: fixed; inset: 0;
+    background: rgba(20,22,26,0.96);
+    display: none;
+    z-index: 10000;
+  }
+  .lightbox.is-open { display: block; }
+
+  .pdf-viewer {
+    display: flex; flex-direction: column;
+    height: 100%; width: 100%;
+    color: #F4F1EA;
+  }
+
+  /* Top toolbar */
+  .pdf-viewer__toolbar {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 12px;
+    background: var(--ink);
+    border-bottom: 1px solid rgba(244,241,234,0.1);
+    flex-shrink: 0;
+  }
+  .pdf-viewer__filename {
+    flex: 1;
+    font-size: 13px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin: 0 8px;
+    color: rgba(244,241,234,0.95);
+  }
+  .pdf-viewer__icon-btn {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    background: transparent;
+    color: rgba(244,241,234,0.85);
+    border-radius: 4px;
+    font-size: 16px;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .pdf-viewer__icon-btn:hover { background: rgba(244,241,234,0.1); color: #F4F1EA; }
+  .pdf-viewer__icon-btn--danger:hover { background: rgba(184,58,42,0.3); color: #FFCAC2; }
+
+  /* Stage (canvas area) */
+  .pdf-viewer__stage {
+    flex: 1;
+    background: #2A2D33;
+    overflow: auto;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    user-select: none;
+  }
+  .pdf-viewer__canvas-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100%;
+    min-height: 100%;
+  }
+  .pdf-viewer__canvas-wrap canvas {
+    background: white;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    display: block;
+    max-width: none;
+  }
+  .pdf-viewer__loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(42,45,51,0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 10;
+  }
+  .pdf-viewer__loading.is-show { display: flex; }
+
+  /* Bottom nav bar */
+  .pdf-viewer__navbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--ink);
+    border-top: 1px solid rgba(244,241,234,0.1);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .pdf-viewer__nav-group, .pdf-viewer__zoom-group {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pdf-viewer__nav-btn {
+    min-width: 40px; height: 40px;
+    padding: 0 10px;
+    background: rgba(244,241,234,0.08);
+    color: #F4F1EA;
+    border-radius: 4px;
+    font-size: 18px; font-weight: 600;
+    display: grid; place-items: center;
+    transition: background 0.15s;
+  }
+  .pdf-viewer__nav-btn:hover:not(:disabled) { background: rgba(244,241,234,0.18); }
+  .pdf-viewer__nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pdf-viewer__nav-btn:active:not(:disabled) { background: var(--accent); color: var(--ink); }
+  .pdf-viewer__page-info {
+    font-size: 13px;
+    padding: 0 12px;
+    min-width: 80px;
+    text-align: center;
+    color: rgba(244,241,234,0.85);
+  }
+  .pdf-viewer__zoom-level {
+    font-size: 11px;
+    min-width: 48px;
+    text-align: center;
+    color: rgba(244,241,234,0.7);
+  }
+
+  /* Bottom info strip */
+  .pdf-viewer__info {
+    background: rgba(20,22,26,0.95);
+    color: rgba(244,241,234,0.7);
+    font-size: 11px;
+    padding: 6px 16px;
+    border-top: 1px solid rgba(244,241,234,0.06);
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .pdf-viewer__info:empty { display: none; }
+
+  /* Mobile: tighter layout, bigger touch targets */
+  @media (max-width: 600px) {
+    .pdf-viewer__toolbar { padding: 6px 8px; }
+    .pdf-viewer__filename { font-size: 12px; }
+    .pdf-viewer__navbar { padding: 6px 8px; gap: 4px; }
+    .pdf-viewer__nav-btn { min-width: 38px; height: 38px; padding: 0 6px; font-size: 16px; }
+    .pdf-viewer__page-info { font-size: 12px; padding: 0 6px; min-width: 60px; }
+    .pdf-viewer__zoom-level { font-size: 10px; min-width: 36px; }
+    .pdf-viewer__stage { padding: 8px; }
+    /* Hide one of the fit buttons on small screens */
+    #pdf-fit-page { display: none; }
+  }
+  @media (max-width: 400px) {
+    .pdf-viewer__zoom-level { display: none; }
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 20px; right: 20px;
+    background: var(--ink); color: var(--accent);
+    padding: 12px 18px;
+    border-left: 4px solid var(--accent);
+    box-shadow: var(--shadow-lg);
+    font-size: 13px; font-weight: 500;
+    z-index: 10001;
+    transform: translateX(120%);
+    transition: transform 0.3s;
+    max-width: 420px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .toast.is-show { transform: translateX(0); }
+  .toast.is-error { color: #FFCAC2; border-left-color: var(--danger); }
+
+  /* Status bar */
+  .statusbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 20px;
+    background: var(--ink); color: rgba(244,241,234,0.6);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    border-top: 1px solid rgba(244,241,234,0.08);
+  }
+  .statusbar__group { display: flex; gap: 20px; align-items: center; }
+  .statusbar__dot {
+    width: 6px; height: 6px; background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Edit mode banner */
+  .edit-banner {
+    background: var(--accent);
+    color: var(--ink);
+    padding: 8px 20px;
+    font-size: 12px; font-weight: 600;
+    display: none;
+    align-items: center; gap: 10px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .edit-banner.is-show { display: flex; }
+
+  /* Read-only banner (cloud mode, non-admin) */
+  .readonly-banner {
+    background: var(--info);
+    color: white;
+    padding: 8px 20px;
+    font-size: 12px; font-weight: 500;
+    display: flex;
+    align-items: center; gap: 10px;
+    border-bottom: 2px solid #14375A;
+  }
+
+  /* Firebase setup modal */
+  .firebase-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    font-size: 12.5px;
+    margin-bottom: 16px;
+    border: 1px solid var(--line);
+  }
+  .firebase-status__dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #9CA3AF;
+    flex-shrink: 0;
+  }
+
+  .firebase-guide {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0;
+    margin-bottom: 12px;
+  }
+  .firebase-guide summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    user-select: none;
+  }
+  .firebase-guide summary:hover { background: var(--bg); }
+  .firebase-guide__steps {
+    margin: 0; padding: 0 20px 16px 36px;
+    font-size: 12.5px; color: var(--ink-2);
+    line-height: 1.7;
+  }
+  .firebase-guide__steps li { margin-bottom: 6px; }
+  .firebase-guide__steps a { color: var(--info); font-weight: 600; }
+  .firebase-guide__code {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--ink);
+    color: #E0E0E0;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.5;
+  }
+
+  /* Loading */
+  .loading {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100000;
+    flex-direction: column; gap: 16px;
+  }
+  .loading__spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading__text { font-size: 12px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  @media (max-width: 900px) {
+    .topbar__meta { display: none; }
+    .sidebar { width: 320px; }
+  }
+  @media (max-width: 700px) {
+    .main { flex-direction: column-reverse; }
+    .sidebar { width: 100%; max-height: 50vh; border-left: none; border-top: 1px solid var(--line); }
+    .topbar__brand { padding: 12px 16px; }
+    .topbar__title h1 { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading" class="loading">
+  <div class="loading__spinner"></div>
+  <div class="loading__text">시스템 초기화 중</div>
+</div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="topbar__brand">
+      <div class="topbar__mark">SRF</div>
+      <div class="topbar__title">
+        <h1>광주SRF 시공 사진</h1>
+        <small>GWANGJU SRF · CONSTRUCTION PHOTO</small>
+      </div>
+    </div>
+    <div class="topbar__meta">
+      <div class="topbar__meta-item">📍 <b>광주광역시 남구 도동길 160</b></div>
+      <div class="topbar__meta-item">광역위생매립장</div>
+    </div>
+    <div class="topbar__actions">
+      <button class="topbar__btn" id="btn-locate" title="시설 위치로 이동">
+        <span>🎯</span><span>맞춤 위치</span>
+      </button>
+      <button class="topbar__btn" id="btn-edit" title="편집 모드 토글">
+        <span>✎</span><span>편집 모드</span>
+      </button>
+      <button class="topbar__btn" id="btn-auth" title="관리자 로그인" style="display:none;">
+        <span>🔓</span><span>관리자 로그인</span>
+      </button>
+      <button class="topbar__btn" id="btn-share" title="웹 공개 가이드">
+        <span>🌐</span><span>공유</span>
+      </button>
+      <button class="topbar__btn" id="btn-settings" title="설정">
+        <span>⚙</span><span>설정</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="edit-banner" id="edit-banner">
+    <span>✎ 편집 모드 활성화</span>
+    <span style="opacity:0.75; font-weight:500;">— 마커를 드래그하여 위치 조정 · 시설명/번호 변경 · 추가 및 삭제</span>
+  </div>
+
+  <main class="main">
+    <div class="map-pane">
+      <div id="map"></div>
+      <div class="map-corner">
+        <strong>광주SRF 시설 현황</strong>
+        <span id="coord-display">위성지도 · ESRI World Imagery</span>
+      </div>
+      <div class="legend">
+        <strong>범례</strong>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#E8B923"></div>
+          <span>시설 위치 (PDF 미등록)</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#14161A; border-color:#E8B923"></div>
+          <span>PDF 등록됨</span>
+        </div>
+        <div class="legend-row">
+          <div class="legend-dot" style="background:#B83A2A; border-color:#14161A"></div>
+          <span>현재 선택</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <div class="sidebar__header">
+        <div class="sidebar__title">
+          <h2>시설 인덱스</h2>
+          <span class="count mono" id="total-count">— / —</span>
+        </div>
+        <p class="sidebar__hint">번호 또는 시설명을 클릭하여 PDF 업로드 / 조회</p>
+      </div>
+      <div class="sidebar__list" id="facility-list"></div>
+    </aside>
+  </main>
+
+  <div class="statusbar">
+    <div class="statusbar__group">
+      <span class="statusbar__dot"></span>
+      <span id="status-backend">STORAGE · 초기화 중</span>
+    </div>
+    <div class="statusbar__group">
+      <span id="last-update">최종 업데이트: —</span>
+      <span>v1.1</span>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Modal -->
+<div class="modal-backdrop" id="photo-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div class="modal__title-num mono" id="photo-modal-num">—</div>
+        <div>
+          <h3 id="photo-modal-name">시설명</h3>
+          <small id="photo-modal-cat">분류</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="upload-zone" id="upload-zone">
+        <div class="upload-zone__icon">📄</div>
+        <div class="upload-zone__text">PDF 업로드</div>
+        <div class="upload-zone__hint">클릭하거나 PDF 파일을 드래그하세요 · 다중 선택 가능 (각 파일 최대 30MB)</div>
+        <input type="file" id="upload-input" accept="application/pdf,.pdf" multiple style="display:none;">
+      </div>
+      <div class="field">
+        <label>업로더</label>
+        <input type="text" id="upload-author" placeholder="이름 (선택)">
+      </div>
+      <div class="field">
+        <label>설명 / 작업 내용</label>
+        <input type="text" id="upload-desc" placeholder="예: 백필터 본체 설치 완료, 가스 라인 연결 작업 중">
+      </div>
+      <div style="border-top: 1px solid var(--line); margin: 20px 0 16px; padding-top: 16px;">
+        <div style="display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 13px; font-weight: 700;">등록된 PDF</h4>
+          <span class="mono" id="photos-count" style="font-size: 11px; color: var(--ink-3);">0개</span>
+        </div>
+        <div id="photos-container"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Facility Modal -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal modal--sm">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div>
+          <h3 id="edit-modal-title">시설 편집</h3>
+          <small>FACILITY EDITOR</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="field">
+        <label>번호</label>
+        <input type="text" id="edit-num" placeholder="예: 1-1, 2-3">
+      </div>
+      <div class="field">
+        <label>시설명</label>
+        <input type="text" id="edit-name" placeholder="예: 백필터, 흡착탑">
+      </div>
+      <div class="field" id="edit-category-field">
+        <label>분류 (카테고리명)</label>
+        <input type="text" id="edit-cat" placeholder="예: 폐기물저장조">
+      </div>
+      <p style="margin: 12px 0 0; font-size: 11px; color: var(--ink-3);">
+        ※ 추가 후 마커를 드래그하여 정확한 위치로 이동하세요.
+      </p>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--danger" id="edit-delete">삭제</button>
+      <div style="flex:1"></div>
+      <button class="btn btn--ghost" data-close>취소</button>
+      <button class="btn btn--accent" id="edit-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Guide Modal -->
+<div class="modal-backdrop" id="share-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div class="modal__title-num" style="background: var(--info); color: white;">🌐</div>
+        <div>
+          <h3>웹 공개 가이드</h3>
+          <small>SHARE THIS APP ON THE WEB</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <!-- ========== FEATURED PUBLISHED URL ========== -->
+      <div class="share-url-card">
+        <div class="share-url-card__label">
+          <span class="share-url-card__live-dot"></span>
+          공식 공유 URL · LIVE
+        </div>
+        <div class="share-url-card__body">
+          <div class="share-url-card__url-block">
+            <div class="share-url-card__url mono" id="share-url-display"></div>
+            <div class="share-url-card__buttons">
+              <button class="btn btn--accent" id="share-url-copy">
+                <span>📋</span><span>URL 복사</span>
+              </button>
+              <button class="btn btn--primary" id="share-url-open">
+                <span>↗</span><span>새 탭 열기</span>
+              </button>
+            </div>
+            <p class="share-url-card__hint">
+              위 URL을 카카오톡 / 이메일 / 단톡방에 공유하세요. 팀원이 클릭하면 별도 설치 없이 어플리케이션이 즉시 실행됩니다.
+            </p>
+          </div>
+          <div class="share-url-card__qr">
+            <img id="share-qr-img" src="" alt="QR Code" onerror="this.parentElement.classList.add('is-error');">
+            <div class="share-url-card__qr-fallback">QR 생성 실패</div>
+            <div class="share-url-card__qr-label">📱 모바일에서 카메라로 스캔</div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin: 24px 0 12px; font-size: 13px; font-weight: 700; color: var(--ink-2); display: flex; align-items: center; gap: 8px;">
+        <span>📦</span><span>다른 호스팅 방법 (필요시 참고)</span>
+      </h4>
+      <p style="margin: 0 0 18px; font-size: 12px; color: var(--ink-3); line-height: 1.6;">
+        다른 플랫폼으로 이전하거나 백업 사본을 호스팅하고 싶을 때 참고하세요.
+      </p>
+
+      <div class="share-method">
+        <div class="share-method__head">
+          <span class="share-method__num">1</span>
+          <div>
+            <h4>Netlify Drop <span class="share-method__tag share-method__tag--easy">가장 간단</span></h4>
+            <p>30초 안에 무료 URL 생성, 계정 없이도 임시 사용 가능</p>
+          </div>
+        </div>
+        <ol class="share-method__steps">
+          <li><a href="https://app.netlify.com/drop" target="_blank" rel="noopener">app.netlify.com/drop</a> 접속</li>
+          <li>이 HTML 파일을 브라우저 화면에 <b>드래그&드롭</b></li>
+          <li>자동 생성된 URL이 표시됨 (예: <span class="mono" style="font-size:11px;">https://xyz.netlify.app</span>)</li>
+          <li>URL을 팀원에게 공유 — 모바일에서도 즉시 접속 가능</li>
+        </ol>
+        <p class="share-method__hint">💡 무료 계정 가입 시 영구 URL 보장 (미가입 시 1시간 후 만료)</p>
+      </div>
+
+      <div class="share-method">
+        <div class="share-method__head">
+          <span class="share-method__num">2</span>
+          <div>
+            <h4>GitHub Pages <span class="share-method__tag share-method__tag--free">영구 무료</span></h4>
+            <p>GitHub 계정 보유 시 영구 URL 생성, 업데이트 시 자동 반영</p>
+          </div>
+        </div>
+        <ol class="share-method__steps">
+          <li>GitHub 로그인 → 새 저장소 생성 (Public, README 포함)</li>
+          <li>"Add file" → "Upload files"로 이 HTML 파일을 <b><span class="mono">index.html</span></b>로 이름 변경 후 업로드</li>
+          <li>저장소 → <b>Settings → Pages</b> 메뉴</li>
+          <li>"Branch"를 <span class="mono">main</span>으로 선택 후 저장</li>
+          <li>약 1분 후 <span class="mono" style="font-size:11px;">https://[사용자명].github.io/[저장소명]</span> URL 활성화</li>
+        </ol>
+      </div>
+
+      <div class="share-method">
+        <div class="share-method__head">
+          <span class="share-method__num">3</span>
+          <div>
+            <h4>Cloudflare Pages <span class="share-method__tag share-method__tag--free">영구 무료</span></h4>
+            <p>빠른 CDN, 한국 접속 속도 우수</p>
+          </div>
+        </div>
+        <ol class="share-method__steps">
+          <li><a href="https://pages.cloudflare.com" target="_blank" rel="noopener">pages.cloudflare.com</a>에서 계정 생성</li>
+          <li>"Create a project" → "Direct Upload" 선택</li>
+          <li>HTML 파일을 업로드하고 프로젝트 이름 입력</li>
+          <li>자동으로 <span class="mono" style="font-size:11px;">https://[프로젝트명].pages.dev</span> URL 생성</li>
+        </ol>
+      </div>
+
+      <div class="share-warning">
+        <div class="share-warning__icon">⚠️</div>
+        <div>
+          <strong>중요: URL 공유 ≠ 데이터 공유</strong>
+          <p>위 방법으로 공개된 URL은 <b>어플리케이션 자체</b>를 모두에게 보여줍니다. 하지만 각 팀원이 업로드한 PDF/시설 정보는 <b>본인 브라우저에만</b> 저장됩니다.</p>
+          <p>팀 데이터 동기화는 다음 절차로 수행하세요:</p>
+          <ol style="margin: 6px 0 0; padding-left: 20px; font-size: 12px;">
+            <li>관리자가 매일 업로드 → <b>설정 → 📤 내보내기</b></li>
+            <li>JSON 파일을 카카오톡/이메일/공유 폴더로 팀원에게 전달</li>
+            <li>팀원은 <b>설정 → 📥 가져오기</b>로 최신 데이터 로드</li>
+          </ol>
+        </div>
+      </div>
+
+      <p style="margin: 18px 0 0; font-size: 11px; color: var(--ink-3); text-align: center; line-height: 1.6;">
+        실시간 자동 데이터 동기화가 필요하다면 Firebase / Supabase 등의 백엔드 연동이 필요하며, 별도 추가 개발이 요구됩니다.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Login Modal -->
+<div class="modal-backdrop" id="login-modal">
+  <div class="modal modal--sm">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div class="modal__title-num" style="background: var(--info); color: white;">👤</div>
+        <div>
+          <h3>관리자 로그인</h3>
+          <small>ADMIN AUTHENTICATION</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <p style="margin: 0 0 16px; font-size: 12px; color: var(--ink-3); line-height: 1.6;">
+        편집 권한을 위해 Firebase 콘솔에서 생성한 관리자 이메일/비밀번호로 로그인하세요.
+      </p>
+      <div class="field">
+        <label>이메일</label>
+        <input type="email" id="login-email" placeholder="admin@example.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>비밀번호</label>
+        <input type="password" id="login-password" placeholder="비밀번호" autocomplete="current-password">
+      </div>
+      <div id="login-error" style="display:none; padding: 8px 12px; background: #FCEAE6; color: var(--danger); font-size: 12px; border-radius: 4px; border-left: 3px solid var(--danger);"></div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost" data-close>취소</button>
+      <button class="btn btn--accent" id="login-submit">로그인</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase Config Modal -->
+<div class="modal-backdrop" id="firebase-modal">
+  <div class="modal">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div class="modal__title-num" style="background: #FF9100; color: white;">🔥</div>
+        <div>
+          <h3>Firebase 설정</h3>
+          <small>CLOUD SYNC SETUP</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="firebase-status" id="firebase-status">
+        <span class="firebase-status__dot" id="firebase-status-dot"></span>
+        <span id="firebase-status-text">상태 확인 중...</span>
+      </div>
+
+      <details class="firebase-guide" open>
+        <summary><b>📋 설정 단계 (처음 한 번만)</b> — Spark(무료) 플랜으로 운영</summary>
+        <ol class="firebase-guide__steps">
+          <li><a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> 접속 → 새 프로젝트 생성</li>
+          <li><b>Build → Authentication</b> 메뉴 → "이메일/비밀번호" 로그인 방법 활성화</li>
+          <li><b>Authentication → Users</b> 탭 → "사용자 추가"로 관리자 계정 생성<br>
+              <span style="color:var(--ink-3); font-size:11px;">예: admin@srf.com / 임의의 강력한 비밀번호</span></li>
+          <li><b>Authentication → Sign-in method</b> → "익명" 로그인도 활성화</li>
+          <li><b>Build → Firestore Database</b> → "데이터베이스 만들기" → 위치는 asia-northeast3 (서울) 권장 → "프로덕션 모드" 선택</li>
+          <li><b>Firestore의 "규칙" 탭</b>에서 아래 규칙 붙여넣기 → "게시":
+            <pre class="firebase-guide__code">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+  }
+}</pre>
+          </li>
+          <li><b>프로젝트 설정 (⚙) → 일반 → "내 앱"</b>에서 "웹 앱 추가" (</> 아이콘) → 앱 등록</li>
+          <li>표시된 <b><span class="mono">firebaseConfig</span></b> 객체의 내용을 복사 → 아래에 붙여넣기</li>
+        </ol>
+        <p style="margin: 10px 0 0; padding: 8px 12px; background: #DCEFE0; border-left: 3px solid var(--success); font-size: 11px; color: var(--ink-2); border-radius: 0 4px 4px 0; line-height: 1.6;">
+          ✅ <b>완전 무료 (Spark 플랜)</b> · PDF는 Firestore에 청크 분할 저장되므로 Storage 활성화/Blaze 플랜 등록이 필요하지 않습니다. 신용카드 등록도 불필요합니다.<br>
+          📊 한도: Firestore 1GB 저장, 일일 50K 읽기 / 20K 쓰기 (광주SRF 예상 사용량 충분 커버)
+        </p>
+      </details>
+
+      <div class="field" style="margin-top: 16px;">
+        <label>Firebase 설정 JSON</label>
+        <textarea id="firebase-config-input" rows="9" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;" placeholder='{
+  "apiKey": "AIza...",
+  "authDomain": "your-project.firebaseapp.com",
+  "projectId": "your-project",
+  "storageBucket": "your-project.appspot.com",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+        <p style="margin: 6px 0 0; font-size: 11px; color: var(--ink-3);">
+          ※ apiKey 등의 값은 Firebase 보안 규칙으로 보호되므로 공개되어도 안전합니다.
+        </p>
+      </div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--danger" id="firebase-clear" style="display:none;">설정 제거</button>
+      <div style="flex:1"></div>
+      <button class="btn btn--ghost" data-close>취소</button>
+      <button class="btn btn--accent" id="firebase-save">저장 및 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal modal--sm">
+    <div class="modal__head">
+      <div class="modal__title">
+        <div>
+          <h3>설정</h3>
+          <small>SETTINGS</small>
+        </div>
+      </div>
+      <button class="modal__close" data-close>✕</button>
+    </div>
+    <div class="modal__body">
+      <div class="field">
+        <label>지도 중심 - 위도</label>
+        <input type="text" id="settings-lat" class="mono">
+      </div>
+      <div class="field">
+        <label>지도 중심 - 경도</label>
+        <input type="text" id="settings-lng" class="mono">
+      </div>
+      <div class="field">
+        <label>줌 레벨</label>
+        <input type="text" id="settings-zoom" class="mono">
+      </div>
+      <p style="margin: 12px 0 16px; font-size: 11px; color: var(--ink-3);">
+        💡 지도를 원하는 위치로 이동/줌 후 "현재 위치 저장"을 누르면 자동으로 채워집니다.
+      </p>
+      <button class="btn btn--ghost" id="settings-capture" style="width:100%; justify-content:center;">현재 지도 위치 저장</button>
+      <hr style="border: none; border-top: 1px solid var(--line); margin: 20px 0;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
+        <h4 style="margin: 0; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+          <span style="color: #FF9100;">🔥</span> Firebase 실시간 동기화
+        </h4>
+        <span class="mono" id="settings-firebase-status" style="font-size: 10px; color: var(--ink-3);">—</span>
+      </div>
+      <p style="margin: 0 0 12px; font-size: 11px; color: var(--ink-3); line-height: 1.5;">
+        Firebase를 연동하면 모든 팀원이 자동으로 같은 데이터를 봅니다. 관리자만 수정 가능, 누구나 조회 가능합니다.<br>
+        <span style="color: var(--success); font-weight: 600;">✓ 완전 무료 (Spark 플랜) · PDF는 Firestore 청크로 저장</span>
+      </p>
+      <button class="btn btn--primary" id="settings-firebase" style="width:100%; justify-content:center;">🔥 Firebase 설정</button>
+      <hr style="border: none; border-top: 1px solid var(--line); margin: 20px 0;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
+        <h4 style="margin: 0; font-size: 13px; font-weight: 700;">데이터 백업 / 팀 공유</h4>
+        <span class="mono" id="settings-backend" style="font-size: 10px; color: var(--ink-3);">—</span>
+      </div>
+      <p style="margin: 0 0 12px; font-size: 11px; color: var(--ink-3); line-height: 1.5;">
+        모든 시설 정보와 PDF를 JSON 파일로 내보내거나, 팀원이 공유한 백업 파일을 가져올 수 있습니다.
+      </p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
+        <button class="btn btn--primary" id="settings-export" style="justify-content: center;">📤 내보내기</button>
+        <button class="btn btn--ghost" id="settings-import" style="justify-content: center;">📥 가져오기</button>
+      </div>
+      <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;">
+      <hr style="border: none; border-top: 1px solid var(--line); margin: 20px 0;">
+      <button class="btn btn--danger" id="settings-reset" style="width:100%; justify-content:center;">기본값으로 초기화</button>
+      <p style="margin: 12px 0 0; font-size: 11px; color: var(--ink-3); text-align: center;">
+        ※ 초기화 시 시설 정보가 기본값으로 복원되며, 등록된 PDF는 유지됩니다.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- PDF Viewer (Lightbox) -->
+<div class="lightbox" id="lightbox">
+  <div class="pdf-viewer">
+    <div class="pdf-viewer__toolbar">
+      <button class="pdf-viewer__icon-btn" id="lightbox-close" title="닫기">✕</button>
+      <div class="pdf-viewer__filename" id="lightbox-filename">PDF</div>
+      <button class="pdf-viewer__icon-btn" id="lightbox-download" title="다운로드">⬇</button>
+      <button class="pdf-viewer__icon-btn pdf-viewer__icon-btn--danger" id="lightbox-delete" title="삭제">🗑</button>
+    </div>
+    <div class="pdf-viewer__stage" id="pdf-stage">
+      <div class="pdf-viewer__loading" id="pdf-loading">
+        <div class="loading__spinner" style="border-top-color: var(--accent);"></div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.7); letter-spacing: 0.1em;">PDF 렌더링 중</div>
+      </div>
+      <div class="pdf-viewer__canvas-wrap" id="pdf-canvas-wrap"></div>
+    </div>
+    <div class="pdf-viewer__navbar">
+      <div class="pdf-viewer__nav-group">
+        <button class="pdf-viewer__nav-btn" id="pdf-prev" title="이전 페이지">‹</button>
+        <span class="pdf-viewer__page-info mono">
+          <span id="pdf-current-page">—</span> / <span id="pdf-total-pages">—</span>
+        </span>
+        <button class="pdf-viewer__nav-btn" id="pdf-next" title="다음 페이지">›</button>
+      </div>
+      <div class="pdf-viewer__zoom-group">
+        <button class="pdf-viewer__nav-btn" id="pdf-zoom-out" title="축소">－</button>
+        <span class="pdf-viewer__zoom-level mono" id="pdf-zoom-level">100%</span>
+        <button class="pdf-viewer__nav-btn" id="pdf-zoom-in" title="확대">＋</button>
+        <button class="pdf-viewer__nav-btn" id="pdf-fit-width" title="너비 맞춤">↔</button>
+        <button class="pdf-viewer__nav-btn" id="pdf-fit-page" title="페이지 맞춤">⊡</button>
+      </div>
+    </div>
+    <div class="pdf-viewer__info" id="pdf-meta-info"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== STORAGE KEYS ====================
+const KEY_FACILITIES = 'srf:facilities';
+const KEY_MAP_CONFIG = 'srf:map-config';
+const KEY_PHOTOS_PREFIX = 'srf:photos:'; // metadata list per facility
+const KEY_PDF_PREFIX = 'srf:pdf:';        // individual PDF data URLs (lazy-loaded)
+const KEY_USER_NAME = 'srf:user-name';
+
+// PDF storage: split into chunks to safely fit under per-key storage limits.
+// Smaller chunks = more reliable saving, more requests
+const MAX_PDF_SIZE = 30 * 1024 * 1024;     // 30MB raw PDF
+const PDF_CHUNK_SIZE = 400 * 1024;         // 400KB per chunk (very conservative)
+
+// Public URL where this app is hosted (for share modal display & QR code)
+const PUBLISHED_URL = 'https://enzoydlpenc.github.io/enzoydl.penc/';
+
+// ==================== FIREBASE CONFIG (HARDCODED) ====================
+// 👇 여기에 Firebase 콘솔에서 받은 firebaseConfig 객체를 직접 붙여넣으세요.
+// 이렇게 하면 모든 사용자가 GitHub URL 접속 즉시 자동으로 동기화됩니다.
+// 설정 후 GitHub에 다시 업로드하면 됩니다.
+//
+// 예시:
+//   const HARDCODED_FIREBASE_CONFIG = {
+//     apiKey: "AIzaSyXXX...",
+//     authDomain: "your-project.firebaseapp.com",
+//     projectId: "your-project",
+//     storageBucket: "your-project.appspot.com",
+//     messagingSenderId: "123456789",
+//     appId: "1:123:web:abc..."
+//   };
+//
+// null로 두면 사용자가 직접 설정 모달에서 입력해야 합니다.
+const HARDCODED_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCBz75L8dnV8YBhhH2QaS1MUfskfVRP_HA",
+  authDomain: "gwangju-srf.firebaseapp.com",
+  databaseURL: "https://gwangju-srf-default-rtdb.firebaseio.com",
+  projectId: "gwangju-srf",
+  storageBucket: "gwangju-srf.firebasestorage.app",
+  messagingSenderId: "327179109218",
+  appId: "1:327179109218:web:f7c69c855eb4691ab7a23b"
+};
+
+
+// ==================== FIREBASE CONFIG ====================
+// Firebase config is stored in localStorage so admins can configure once and team members
+// auto-load it. To make this app cloud-synced, the admin enters Firebase config via the
+// in-app setup wizard (Settings → Firebase 설정).
+const FIREBASE_CONFIG_KEY = 'srf:firebase-config';
+
+// CloudSync: Firebase Firestore + Storage + Auth wrapper
+const CloudSync = (() => {
+  let app = null;
+  let auth = null;
+  let db = null;
+  let enabled = false;
+  let initError = null;
+  let currentUser = null;
+  let isAdminUser = false;
+  let listeners = []; // change subscribers
+
+  function loadConfig() {
+    // Hardcoded config takes precedence — shared across all users automatically
+    if (HARDCODED_FIREBASE_CONFIG && HARDCODED_FIREBASE_CONFIG.apiKey) {
+      return HARDCODED_FIREBASE_CONFIG;
+    }
+    // Fallback: localStorage (per-user setup via wizard)
+    try {
+      const raw = localStorage.getItem(FIREBASE_CONFIG_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function saveConfig(config) {
+    localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
+  }
+  function clearConfig() {
+    localStorage.removeItem(FIREBASE_CONFIG_KEY);
+  }
+  function isConfigured() {
+    return !!loadConfig();
+  }
+  function isHardcoded() {
+    return !!(HARDCODED_FIREBASE_CONFIG && HARDCODED_FIREBASE_CONFIG.apiKey);
+  }
+
+  async function init() {
+    if (typeof firebase === 'undefined') {
+      initError = 'Firebase SDK 로드 실패';
+      return false;
+    }
+    const config = loadConfig();
+    if (!config) return false;
+
+    try {
+      // Avoid duplicate init
+      if (firebase.apps.length > 0) {
+        app = firebase.app();
+      } else {
+        app = firebase.initializeApp(config);
+      }
+      auth = firebase.auth();
+      db = firebase.firestore();
+      enabled = true;
+
+      // Listen to auth state changes
+      auth.onAuthStateChanged(user => {
+        currentUser = user;
+        // Admin = signed in with email/password (not anonymous)
+        isAdminUser = !!(user && !user.isAnonymous);
+        listeners.forEach(fn => { try { fn({ type: 'auth', user, isAdmin: isAdminUser }); } catch(e) {} });
+      });
+
+      // Sign in anonymously for read access (only if not already signed in)
+      if (!auth.currentUser) {
+        try {
+          await auth.signInAnonymously();
+        } catch (e) {
+          console.warn('Anonymous sign-in failed:', e);
+          // Continue anyway - reads might still work with public rules
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error('Firebase init failed:', e);
+      initError = e.message || String(e);
+      enabled = false;
+      return false;
+    }
+  }
+
+  async function signInAdmin(email, password) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    await auth.signInWithEmailAndPassword(email, password);
+    // After admin login, currentUser updates via onAuthStateChanged
+  }
+
+  async function signOutAdmin() {
+    if (!enabled) return;
+    await auth.signOut();
+    // Re-sign in anonymously
+    try { await auth.signInAnonymously(); } catch(e) {}
+  }
+
+  function onChange(fn) {
+    listeners.push(fn);
+    return () => { listeners = listeners.filter(x => x !== fn); };
+  }
+
+  // ===== Firestore data operations =====
+  // Document path: appData/main holds facilities + mapConfig
+  async function getAppData() {
+    if (!enabled) return null;
+    const doc = await db.collection('appData').doc('main').get();
+    return doc.exists ? doc.data() : null;
+  }
+
+  async function setAppData(data) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    if (!isAdminUser) throw new Error('관리자 권한 필요');
+    await db.collection('appData').doc('main').set({
+      ...data,
+      _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  }
+
+  function subscribeAppData(callback) {
+    if (!enabled) return () => {};
+    return db.collection('appData').doc('main').onSnapshot(doc => {
+      if (doc.exists) callback(doc.data());
+    }, err => console.error('appData subscribe error:', err));
+  }
+
+  // ===== PDF metadata (one doc per PDF, indexed by facilityId) =====
+  async function listPDFsForFacility(facilityId) {
+    if (!enabled) return [];
+    const snap = await db.collection('photoMeta')
+      .where('facilityId', '==', facilityId)
+      .get();
+    const items = [];
+    snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    return items;
+  }
+
+  function subscribePDFsForFacility(facilityId, callback) {
+    if (!enabled) return () => {};
+    return db.collection('photoMeta')
+      .where('facilityId', '==', facilityId)
+      .onSnapshot(snap => {
+        const items = [];
+        snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+        callback(items);
+      }, err => console.error('photoMeta subscribe error:', err));
+  }
+
+  async function setPDFMeta(pdfId, meta) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    if (!isAdminUser) throw new Error('관리자 권한 필요');
+    await db.collection('photoMeta').doc(pdfId).set({
+      ...meta,
+      _updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  async function deletePDFMeta(pdfId) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    if (!isAdminUser) throw new Error('관리자 권한 필요');
+    await db.collection('photoMeta').doc(pdfId).delete();
+  }
+
+  // ===== PDF binary storage in Firestore (chunked, fits Spark free plan) =====
+  // Each chunk goes to: pdfChunks/{pdfId}/parts/{index}
+  // Firestore document limit is ~1MB, so we chunk under 700KB to be safe
+  const FS_CHUNK_SIZE = 700 * 1024;
+
+  async function uploadPDFChunked(pdfId, dataUrl) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    if (!isAdminUser) throw new Error('관리자 권한 필요');
+
+    // Split dataUrl into ~700KB chunks
+    const chunks = [];
+    for (let i = 0; i < dataUrl.length; i += FS_CHUNK_SIZE) {
+      chunks.push(dataUrl.slice(i, i + FS_CHUNK_SIZE));
+    }
+
+    // Use batched writes for atomicity (Firestore batch limit is 500 ops)
+    // For typical PDFs (< 30MB → < 60 chunks) one batch is sufficient
+    const BATCH_LIMIT = 400;
+    for (let start = 0; start < chunks.length; start += BATCH_LIMIT) {
+      const batch = db.batch();
+      const end = Math.min(start + BATCH_LIMIT, chunks.length);
+      for (let i = start; i < end; i++) {
+        const ref = db.collection('pdfChunks').doc(pdfId).collection('parts').doc(String(i));
+        batch.set(ref, { data: chunks[i], idx: i, total: chunks.length });
+      }
+      await batch.commit();
+    }
+    return chunks.length;
+  }
+
+  async function loadPDFChunkedFromCloud(pdfId, chunkCount) {
+    if (!enabled) throw new Error('Firebase 미설정');
+
+    // Read all chunks in parallel for speed
+    const promises = [];
+    for (let i = 0; i < chunkCount; i++) {
+      const ref = db.collection('pdfChunks').doc(pdfId).collection('parts').doc(String(i));
+      promises.push(ref.get());
+    }
+    const docs = await Promise.all(promises);
+    const parts = [];
+    for (let i = 0; i < docs.length; i++) {
+      if (!docs[i].exists) throw new Error(`청크 ${i} 누락 (총 ${chunkCount}개 중)`);
+      parts.push(docs[i].data().data);
+    }
+    return parts.join('');
+  }
+
+  async function deletePDFChunkedFromCloud(pdfId, chunkCount) {
+    if (!enabled) throw new Error('Firebase 미설정');
+    if (!isAdminUser) throw new Error('관리자 권한 필요');
+
+    const BATCH_LIMIT = 400;
+    for (let start = 0; start < chunkCount; start += BATCH_LIMIT) {
+      const batch = db.batch();
+      const end = Math.min(start + BATCH_LIMIT, chunkCount);
+      for (let i = start; i < end; i++) {
+        const ref = db.collection('pdfChunks').doc(pdfId).collection('parts').doc(String(i));
+        batch.delete(ref);
+      }
+      await batch.commit();
+    }
+  }
+
+  return {
+    isConfigured,
+    isHardcoded,
+    init,
+    saveConfig,
+    clearConfig,
+    loadConfig,
+    signInAdmin,
+    signOutAdmin,
+    onChange,
+    getAppData,
+    setAppData,
+    subscribeAppData,
+    listPDFsForFacility,
+    subscribePDFsForFacility,
+    setPDFMeta,
+    deletePDFMeta,
+    uploadPDFChunked,
+    loadPDFChunkedFromCloud,
+    deletePDFChunkedFromCloud,
+    get enabled() { return enabled; },
+    get isAdmin() { return isAdminUser; },
+    get currentUser() { return currentUser; },
+    get initError() { return initError; }
+  };
+})();
+
+// ==================== DEFAULT DATA ====================
+// 광주광역시 남구 도동길 160 (광주광역시 광역위생매립장 SRF) 좌표
+// 사용자가 편집 모드에서 정확한 위치로 마커 드래그 조정
+const DEFAULT_CENTER = { lat: 35.087795, lng: 126.885608, zoom: 19 };
+// DEFAULT_CENTER 변경 시 이 값을 1 증가시키면 기존 저장된 지도 설정이 자동으로 새 기본값으로 갱신됨
+const CONFIG_VERSION = 2;
+
+const DEFAULT_FACILITIES = [
+  {
+    id: 'cat-1', num: '1', name: '건조배가스',
+    facilities: [
+      { id: 'f-1-1', num: '1-1', name: '탈취로', lat: 35.10350, lng: 126.89535 },
+      { id: 'f-1-2', num: '1-2', name: '냉각탑', lat: 35.10340, lng: 126.89580 }
+    ]
+  },
+  {
+    id: 'cat-2', num: '2', name: '폐기물저장조',
+    facilities: [
+      { id: 'f-2-1', num: '2-1', name: '백필터', lat: 35.10365, lng: 126.89540 },
+      { id: 'f-2-2', num: '2-2', name: '세라믹필터', lat: 35.10365, lng: 126.89560 },
+      { id: 'f-2-3', num: '2-3', name: 'FAN', lat: 35.10350, lng: 126.89575 }
+    ]
+  },
+  {
+    id: 'cat-3', num: '3', name: '기계적 전처리실',
+    facilities: [
+      { id: 'f-3-1', num: '3-1', name: '백필터', lat: 35.10318, lng: 126.89540 },
+      { id: 'f-3-2', num: '3-2', name: '흡착탑', lat: 35.10330, lng: 126.89545 }
+    ]
+  },
+  {
+    id: 'cat-4', num: '4', name: '건조기실',
+    facilities: [
+      { id: 'f-4-1', num: '4-1', name: '백필터', lat: 35.10350, lng: 126.89510 }
+    ]
+  },
+  {
+    id: 'cat-5', num: '5', name: '고형연료 저장조',
+    facilities: [
+      { id: 'f-5-1', num: '5-1', name: '백필터/흡착탑', lat: 35.10358, lng: 126.89505 }
+    ]
+  },
+  {
+    id: 'cat-6', num: '6', name: '고형연료 반출장',
+    facilities: [
+      { id: 'f-6-1', num: '6-1', name: '흡착탑/FAN', lat: 35.10322, lng: 126.89510 }
+    ]
+  }
+];
+
+// ==================== STATE ====================
+let state = {
+  facilities: [],
+  mapConfig: { ...DEFAULT_CENTER, configVersion: CONFIG_VERSION },
+  isEditMode: false,
+  currentFacilityId: null,
+  currentEditing: null,
+  photosCache: {}, // facilityId -> photos[]
+  userName: ''
+};
+
+let map;
+let markers = {}; // facilityId -> Leaflet marker
+
+// ==================== STORAGE HELPERS ====================
+// Unified storage abstraction: prefers window.storage (Claude.ai), falls back to IndexedDB.
+// IndexedDB works in any browser and persists across sessions in the user's local browser.
+const SRFStorage = (() => {
+  const useNative = !!(window.storage && typeof window.storage.set === 'function');
+  const DB_NAME = 'srf-app-db';
+  const STORE = 'kv';
+  let dbPromise = null;
+
+  function openDB() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('IndexedDB not supported in this browser'));
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  function idbReq(mode, fn) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const store = tx.objectStore(STORE);
+      const req = fn(store);
+      if (req && typeof req === 'object' && 'onsuccess' in req) {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } else {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      }
+    }));
+  }
+
+  return {
+    backend: useNative ? 'cloud' : 'local',
+    backendName: useNative ? 'Claude.ai 공유 저장소' : '브라우저 로컬 저장소 (IndexedDB)',
+
+    async get(key) {
+      if (useNative) {
+        const r = await window.storage.get(key, true);
+        return r ? r.value : null;
+      }
+      const value = await idbReq('readonly', s => s.get(key));
+      return value !== undefined ? value : null;
+    },
+    async set(key, value) {
+      const valStr = typeof value === 'string' ? value : JSON.stringify(value);
+      if (useNative) {
+        await window.storage.set(key, valStr, true);
+        return;
+      }
+      await idbReq('readwrite', s => s.put(valStr, key));
+    },
+    async del(key) {
+      if (useNative) {
+        await window.storage.delete(key, true);
+        return;
+      }
+      await idbReq('readwrite', s => s.delete(key));
+    },
+    async listAll() {
+      if (useNative && typeof window.storage.list === 'function') {
+        const r = await window.storage.list('', true);
+        return (r && r.keys) || [];
+      }
+      const keys = await idbReq('readonly', s => s.getAllKeys());
+      return keys || [];
+    }
+  };
+})();
+
+let lastStorageError = null;
+
+async function storageGet(key, shared = true) {
+  try {
+    return await SRFStorage.get(key);
+  } catch (e) {
+    console.error('storage.get failed:', key, e);
+    return null;
+  }
+}
+async function storageSet(key, value, shared = true) {
+  try {
+    await SRFStorage.set(key, value);
+    return true;
+  } catch (e) {
+    lastStorageError = `[${key}] ${e?.message || String(e)}`;
+    console.error('storage.set failed:', key, 'len:', (typeof value === 'string' ? value.length : JSON.stringify(value).length), e);
+    return false;
+  }
+}
+async function storageDelete(key, shared = true) {
+  try {
+    await SRFStorage.del(key);
+  } catch (e) {}
+}
+
+// ==================== EXPORT / IMPORT ====================
+async function exportAllData() {
+  showToast('데이터 내보내기 중...');
+  try {
+    const keys = await SRFStorage.listAll();
+    const data = {
+      __format: 'srf-app-export',
+      __version: 1,
+      __exportedAt: new Date().toISOString(),
+      __keyCount: keys.length,
+      keys: {}
+    };
+    for (const key of keys) {
+      data.keys[key] = await SRFStorage.get(key);
+    }
+    const json = JSON.stringify(data);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `srf-backup-${today}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const sizeMB = (json.length / 1024 / 1024).toFixed(2);
+    showToast(`내보내기 완료 · ${keys.length}개 항목 · ${sizeMB}MB`);
+  } catch (e) {
+    console.error(e);
+    showToast('내보내기 실패: ' + (e?.message || e), true);
+  }
+}
+
+async function importAllData(file) {
+  if (!file) return;
+  let data;
+  try {
+    const text = await file.text();
+    data = JSON.parse(text);
+    if (data.__format !== 'srf-app-export' || !data.keys) {
+      throw new Error('SRF 백업 파일 형식이 아닙니다');
+    }
+  } catch (e) {
+    showToast('파일 파싱 실패: ' + (e?.message || e), true);
+    return;
+  }
+
+  const exportedAt = data.__exportedAt ? new Date(data.__exportedAt).toLocaleString('ko-KR') : '알 수 없음';
+  const ok = confirm(
+    `현재 저장된 모든 데이터가 가져온 데이터로 대체됩니다.\n\n` +
+    `백업 일시: ${exportedAt}\n` +
+    `포함 항목: ${data.__keyCount || Object.keys(data.keys).length}개\n\n` +
+    `계속하시겠습니까?`
+  );
+  if (!ok) return;
+
+  showToast('가져오는 중...');
+  try {
+    // Clear existing data
+    const existingKeys = await SRFStorage.listAll();
+    for (const key of existingKeys) {
+      await SRFStorage.del(key);
+    }
+    // Import new data
+    let count = 0;
+    for (const [key, value] of Object.entries(data.keys)) {
+      await SRFStorage.set(key, value);
+      count++;
+    }
+    showToast(`가져오기 완료 · ${count}개 · 페이지 새로고침`);
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    console.error(e);
+    showToast('가져오기 실패: ' + (e?.message || e), true);
+  }
+}
+
+// ==================== ADMIN UI VISIBILITY ====================
+// In cloud mode, only admins can edit. Hide all editing UI for non-admins.
+function applyAdminUIVisibility() {
+  const cloudActive = CloudSync.enabled;
+  const isAdminMode = !cloudActive || CloudSync.isAdmin;
+
+  // Edit mode button
+  const editBtn = document.getElementById('btn-edit');
+  if (editBtn) editBtn.style.display = isAdminMode ? '' : 'none';
+
+  // Force exit edit mode if no longer admin
+  if (!isAdminMode && state.isEditMode) {
+    state.isEditMode = false;
+    document.getElementById('btn-edit')?.classList.remove('is-active');
+    document.getElementById('edit-banner')?.classList.remove('is-show');
+    renderFacilityList();
+    renderMarkers();
+  }
+
+  // Upload zone in PDF modal
+  const uploadZone = document.getElementById('upload-zone');
+  if (uploadZone) uploadZone.style.display = isAdminMode ? '' : 'none';
+  const uploadFields = document.querySelectorAll('#photo-modal .field, #photo-modal .field-row');
+  uploadFields.forEach(el => {
+    el.style.display = isAdminMode ? '' : 'none';
+  });
+
+  // Show read-only banner
+  let banner = document.getElementById('readonly-banner');
+  if (cloudActive && !CloudSync.isAdmin) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'readonly-banner';
+      banner.className = 'readonly-banner';
+      banner.innerHTML = '👁️ 읽기 전용 모드 — 시설 정보와 PDF는 조회만 가능합니다. 편집은 관리자 로그인 후 가능합니다.';
+      const editBan = document.getElementById('edit-banner');
+      editBan.parentNode.insertBefore(banner, editBan);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
+}
+
+function updateAuthButton() {
+  const btn = document.getElementById('btn-auth');
+  if (!btn) return;
+  if (!CloudSync.enabled) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+  if (CloudSync.isAdmin) {
+    btn.innerHTML = '<span>👤</span><span>로그아웃</span>';
+    btn.classList.add('is-active');
+    btn.title = `로그인됨: ${CloudSync.currentUser?.email || ''}`;
+  } else {
+    btn.innerHTML = '<span>🔓</span><span>관리자 로그인</span>';
+    btn.classList.remove('is-active');
+    btn.title = '관리자 권한으로 로그인';
+  }
+}
+
+// ==================== INIT ====================
+async function init() {
+  // Setup PDF.js worker
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  } else {
+    console.warn('PDF.js library not loaded - thumbnails will be unavailable');
+  }
+
+  console.info(`[SRF] Storage backend: ${SRFStorage.backendName}`);
+
+  // ===== Firebase Setup Diagnostics =====
+  console.group('[SRF] Firebase 진단');
+  console.info('1. Firebase SDK 로드 여부:', typeof firebase !== 'undefined' ? '✅ OK' : '❌ 실패');
+  console.info('2. Hardcoded 설정 존재:', CloudSync.isHardcoded() ? '✅ Yes' : '❌ No (null로 두면 사용자별 입력 필요)');
+  console.info('3. 설정 발견 (hardcoded 또는 localStorage):', CloudSync.isConfigured() ? '✅ Yes' : '❌ No');
+  if (!CloudSync.isHardcoded() && !CloudSync.isConfigured()) {
+    console.warn('⚠️ Firebase 설정이 없어 LOCAL MODE로 작동합니다.');
+    console.warn('💡 모든 사용자가 자동 동기화되도록 하려면:');
+    console.warn('   → 코드 상단의 HARDCODED_FIREBASE_CONFIG 변수에 firebaseConfig를 직접 입력하고 GitHub에 재업로드하세요.');
+  }
+  console.groupEnd();
+
+  // Try to initialize Firebase if configured
+  let cloudReady = false;
+  if (CloudSync.isConfigured()) {
+    cloudReady = await CloudSync.init();
+    if (cloudReady) {
+      console.info('[SRF] ✅ Cloud sync active (Firebase Firestore)');
+    } else {
+      console.error('[SRF] ❌ Firebase config exists but init failed:', CloudSync.initError);
+      showToast('Firebase 초기화 실패: ' + (CloudSync.initError || '알 수 없는 오류'), true);
+    }
+  }
+
+  // Update status bar
+  const statusEl = document.getElementById('status-backend');
+  if (statusEl) {
+    if (cloudReady) {
+      statusEl.textContent = 'CLOUD SYNC · 실시간 동기화 활성';
+    } else {
+      statusEl.textContent = SRFStorage.backend === 'cloud'
+        ? 'SHARED MODE · 팀 공유 활성화'
+        : 'LOCAL MODE · 브라우저 저장소 (Firebase 미설정)';
+    }
+  }
+
+  // Cloud mode: load app data from Firestore
+  if (cloudReady) {
+    try {
+      const cloudData = await CloudSync.getAppData();
+      if (cloudData && cloudData.facilities) {
+        state.facilities = cloudData.facilities;
+      }
+      if (cloudData && cloudData.mapConfig) {
+        state.mapConfig = { ...DEFAULT_CENTER, configVersion: CONFIG_VERSION, ...cloudData.mapConfig };
+      }
+    } catch (e) {
+      console.error('Cloud data load failed:', e);
+    }
+  }
+
+  // Load map config from local (cloud takes precedence above if set)
+  if (!cloudReady) {
+    const savedConfig = await storageGet(KEY_MAP_CONFIG, true);
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.configVersion === CONFIG_VERSION) {
+          state.mapConfig = { ...DEFAULT_CENTER, configVersion: CONFIG_VERSION, ...parsed };
+        } else {
+          state.mapConfig = { ...DEFAULT_CENTER, configVersion: CONFIG_VERSION, lastUpdate: parsed.lastUpdate };
+        }
+      } catch(e) {}
+    }
+  }
+  // Load facilities from local if not loaded from cloud
+  if (!cloudReady || !state.facilities.length) {
+    const savedFacilities = await storageGet(KEY_FACILITIES, true);
+    if (savedFacilities) {
+      try {
+        const parsed = JSON.parse(savedFacilities);
+        state.facilities = Array.isArray(parsed) && parsed.length ? parsed : structuredClone(DEFAULT_FACILITIES);
+      } catch(e) {
+        state.facilities = structuredClone(DEFAULT_FACILITIES);
+      }
+    } else {
+      state.facilities = structuredClone(DEFAULT_FACILITIES);
+      if (!cloudReady) await storageSet(KEY_FACILITIES, state.facilities, true);
+    }
+  }
+  // Load user name (personal)
+  const savedName = await storageGet(KEY_USER_NAME, false);
+  state.userName = savedName || '';
+
+  // Init UI
+  initMap();
+  renderFacilityList();
+  renderMarkers();
+  bindEvents();
+  updateLastUpdate();
+  applyAdminUIVisibility();
+
+  // Subscribe to cloud changes for real-time updates
+  if (cloudReady) {
+    // Auth state changes -> update UI
+    CloudSync.onChange((evt) => {
+      if (evt.type === 'auth') {
+        applyAdminUIVisibility();
+        updateAuthButton();
+      }
+    });
+
+    // Real-time facility config sync
+    CloudSync.subscribeAppData(async (data) => {
+      if (data.facilities) state.facilities = data.facilities;
+      if (data.mapConfig) state.mapConfig = { ...state.mapConfig, ...data.mapConfig };
+      // Cache locally
+      await storageSet(KEY_FACILITIES, state.facilities, true);
+      await storageSet(KEY_MAP_CONFIG, state.mapConfig, true);
+      // Re-render
+      await renderFacilityList();
+      await renderMarkers();
+      updateLastUpdate();
+    });
+
+    updateAuthButton();
+  }
+
+  document.getElementById('loading').style.display = 'none';
+}
+
+// ==================== MAP ====================
+function initMap() {
+  map = L.map('map', { zoomControl: true, attributionControl: false })
+    .setView([state.mapConfig.lat, state.mapConfig.lng], state.mapConfig.zoom);
+
+  // Esri World Imagery (free satellite tiles)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles © Esri'
+  }).addTo(map);
+
+  // Labels overlay
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, opacity: 0.85
+  }).addTo(map);
+
+  L.control.attribution({ position: 'bottomright', prefix: false }).addAttribution('© Esri').addTo(map);
+
+  map.on('moveend zoomend', () => {
+    const c = map.getCenter();
+    document.getElementById('coord-display').textContent =
+      `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)} · z${map.getZoom()}`;
+  });
+
+  // Init coord display
+  const c = map.getCenter();
+  document.getElementById('coord-display').textContent =
+    `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)} · z${map.getZoom()}`;
+}
+
+function createMarkerIcon(num, hasPhotos, isActive) {
+  let cls = 'marker-pin';
+  if (isActive) cls += ' is-active';
+  else if (hasPhotos) cls += ' has-photos';
+  return L.divIcon({
+    className: '',
+    html: `<div class="${cls}">${num}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+}
+
+async function renderMarkers() {
+  // Clear existing
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+
+  for (const cat of state.facilities) {
+    for (const f of cat.facilities) {
+      const photos = await getPhotosFor(f.id);
+      const hasPhotos = photos.length > 0;
+      const isActive = state.currentFacilityId === f.id;
+      const marker = L.marker([f.lat, f.lng], {
+        icon: createMarkerIcon(f.num, hasPhotos, isActive),
+        draggable: state.isEditMode,
+        title: `${f.num} ${f.name}`
+      }).addTo(map);
+
+      marker.on('click', () => openPhotoModal(f.id));
+      marker.on('dragend', async (ev) => {
+        const ll = ev.target.getLatLng();
+        f.lat = ll.lat; f.lng = ll.lng;
+        await saveFacilities();
+        showToast(`${f.num} 위치 저장됨`);
+      });
+
+      markers[f.id] = marker;
+    }
+  }
+}
+
+// ==================== FACILITY LIST RENDER ====================
+async function renderFacilityList() {
+  const container = document.getElementById('facility-list');
+  container.innerHTML = '';
+
+  let totalFacilities = 0;
+  let withPhotos = 0;
+
+  for (const cat of state.facilities) {
+    const catEl = document.createElement('div');
+    catEl.className = 'category';
+    catEl.innerHTML = `
+      <div class="category__head">
+        <div class="category__name">
+          <span class="category__num mono">${escapeHtml(cat.num)}</span>
+          <span>${escapeHtml(cat.name)}</span>
+        </div>
+        <div class="category__actions" data-cat-actions style="display:${state.isEditMode ? 'flex' : 'none'};">
+          <button class="icon-btn" data-edit-cat="${cat.id}" title="카테고리 편집">✎</button>
+          <button class="icon-btn danger" data-delete-cat="${cat.id}" title="카테고리 삭제">🗑</button>
+        </div>
+      </div>
+      <div class="facilities" data-cat-id="${cat.id}"></div>
+    `;
+    const facsContainer = catEl.querySelector('.facilities');
+
+    for (const f of cat.facilities) {
+      const photos = await getPhotosFor(f.id);
+      totalFacilities++;
+      if (photos.length > 0) withPhotos++;
+
+      const fEl = document.createElement('div');
+      fEl.className = 'facility' + (state.currentFacilityId === f.id ? ' is-active' : '');
+      fEl.dataset.fid = f.id;
+      fEl.innerHTML = `
+        <div class="facility__num mono">${escapeHtml(f.num)}</div>
+        <div class="facility__name">${escapeHtml(f.name)}</div>
+        <div class="facility__count ${photos.length ? 'has-photos' : ''} mono">${photos.length}</div>
+        <div class="facility__actions ${state.isEditMode ? 'edit-mode' : ''}">
+          <button class="icon-btn" data-edit-fac="${f.id}" title="시설 편집">✎</button>
+          <button class="icon-btn danger" data-delete-fac="${f.id}" title="시설 삭제">🗑</button>
+        </div>
+      `;
+      fEl.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-edit-fac], [data-delete-fac]')) return;
+        openPhotoModal(f.id);
+      });
+      facsContainer.appendChild(fEl);
+    }
+
+    if (state.isEditMode) {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'add-facility-btn';
+      addBtn.dataset.addFac = cat.id;
+      addBtn.innerHTML = '＋ 시설 추가';
+      facsContainer.appendChild(addBtn);
+    }
+
+    container.appendChild(catEl);
+  }
+
+  if (state.isEditMode) {
+    const addCatBtn = document.createElement('button');
+    addCatBtn.className = 'add-category-btn';
+    addCatBtn.id = 'add-cat-btn';
+    addCatBtn.innerHTML = '＋ 새 카테고리 추가';
+    container.appendChild(addCatBtn);
+  }
+
+  document.getElementById('total-count').textContent = `${withPhotos} / ${totalFacilities}`;
+}
+
+// ==================== PHOTOS ====================
+async function getPhotosFor(facilityId) {
+  if (state.photosCache[facilityId]) return state.photosCache[facilityId];
+
+  let photos = [];
+  if (CloudSync.enabled) {
+    // Cloud mode: fetch from Firestore
+    try {
+      photos = await CloudSync.listPDFsForFacility(facilityId);
+    } catch (e) {
+      console.error('Cloud list failed:', e);
+      photos = [];
+    }
+  } else {
+    // Local mode: fetch from IndexedDB
+    const data = await storageGet(KEY_PHOTOS_PREFIX + facilityId, true);
+    if (data) {
+      try { photos = JSON.parse(data); } catch(e) {}
+    }
+    if (!Array.isArray(photos)) photos = [];
+  }
+  state.photosCache[facilityId] = photos;
+  return photos;
+}
+
+async function savePhotos(facilityId, photos) {
+  state.photosCache[facilityId] = photos;
+  await storageSet(KEY_PHOTOS_PREFIX + facilityId, photos, true);
+  await saveFacilities(); // bump update time
+}
+
+// ==================== CHUNKED PDF STORAGE ====================
+// Split a string into fixed-size chunks
+function splitIntoChunks(str, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < str.length; i += chunkSize) {
+    chunks.push(str.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+// Save a PDF data URL as N chunks. Returns chunk count on success, 0 on failure.
+async function savePDFChunked(pdfId, dataUrl) {
+  const chunks = splitIntoChunks(dataUrl, PDF_CHUNK_SIZE);
+  for (let i = 0; i < chunks.length; i++) {
+    const ok = await storageSet(KEY_PDF_PREFIX + pdfId + ':' + i, chunks[i], true);
+    if (!ok) {
+      // Rollback - remove already-saved chunks
+      for (let j = 0; j < i; j++) {
+        await storageDelete(KEY_PDF_PREFIX + pdfId + ':' + j, true);
+      }
+      return 0;
+    }
+  }
+  return chunks.length;
+}
+
+// Reassemble a PDF from its chunks. Returns the full data URL or null.
+async function loadPDFChunked(pdfId, chunkCount) {
+  // Legacy single-key support (older uploads before chunking)
+  if (!chunkCount) {
+    return await storageGet(KEY_PDF_PREFIX + pdfId, true);
+  }
+  const parts = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const part = await storageGet(KEY_PDF_PREFIX + pdfId + ':' + i, true);
+    if (part === null) return null;
+    parts.push(part);
+  }
+  return parts.join('');
+}
+
+// Delete all chunks (or legacy single key) for a PDF
+async function deletePDFChunked(pdfId, chunkCount) {
+  if (!chunkCount) {
+    await storageDelete(KEY_PDF_PREFIX + pdfId, true);
+    return;
+  }
+  for (let i = 0; i < chunkCount; i++) {
+    await storageDelete(KEY_PDF_PREFIX + pdfId + ':' + i, true);
+  }
+}
+
+// Process PDF: read full file as data URL + render first-page thumbnail
+async function processPDF(file) {
+  // Read full PDF as data URL for storage (always works)
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  // Render first page as JPEG thumbnail (best effort)
+  let thumbnail = '';
+  if (window.pdfjsLib) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfData = new Uint8Array(arrayBuffer);
+      const pdfDoc = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
+      const page = await pdfDoc.getPage(1);
+
+      const targetWidth = 480;
+      const baseViewport = page.getViewport({ scale: 1.0 });
+      const scale = targetWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      thumbnail = canvas.toDataURL('image/jpeg', 0.78);
+
+      try { pdfDoc.destroy(); } catch(_) {}
+    } catch (e) {
+      console.warn('썸네일 생성 실패:', e);
+    }
+  }
+
+  return { dataUrl, thumbnail };
+}
+
+// Convert base64 data URL to a Blob URL (browsers render PDF blob URLs reliably in iframes)
+function dataUrlToBlobUrl(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = (header.match(/:(.*?);/) || [, 'application/pdf'])[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  return URL.createObjectURL(blob);
+}
+
+async function uploadPhotos(facilityId, files) {
+  if (!files || !files.length) return;
+
+  // Permission check for cloud mode
+  if (CloudSync.enabled && !CloudSync.isAdmin) {
+    showToast('관리자 권한이 필요합니다. 로그인 후 다시 시도하세요.', true);
+    return;
+  }
+
+  const author = document.getElementById('upload-author').value.trim();
+  const desc = document.getElementById('upload-desc').value.trim();
+
+  // Save user name preference
+  if (author && author !== state.userName) {
+    state.userName = author;
+    await storageSet(KEY_USER_NAME, author, false);
+  }
+
+  // Filter PDF files only
+  const pdfs = Array.from(files).filter(f =>
+    f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+  );
+  if (!pdfs.length) {
+    showToast('PDF 파일만 업로드 가능합니다', true);
+    return;
+  }
+
+  showToast(`${pdfs.length}개 PDF 처리 중...`);
+  let success = 0;
+  let oversize = 0;
+  let failed = 0;
+  const errorDetails = [];
+  lastStorageError = null;
+
+  // ===== Cloud Mode (Firebase Firestore - chunked PDF storage) =====
+  if (CloudSync.enabled) {
+    for (const file of pdfs) {
+      // Apply size limit even in cloud mode (large PDFs = many chunks = many doc writes)
+      if (file.size > MAX_PDF_SIZE) {
+        oversize++;
+        continue;
+      }
+      try {
+        // Process PDF: get base64 dataUrl + thumbnail
+        const { dataUrl, thumbnail } = await processPDF(file);
+        const id = 'pdf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+        // Upload PDF as chunks to Firestore
+        const chunkCount = await CloudSync.uploadPDFChunked(id, dataUrl);
+
+        // Save metadata to Firestore (no storageUrl, just chunkCount)
+        await CloudSync.setPDFMeta(id, {
+          facilityId,
+          uploadedAt: new Date().toISOString(),
+          author: author || '익명',
+          desc,
+          filename: file.name,
+          thumbnail,
+          size: file.size,
+          chunkCount
+        });
+        success++;
+      } catch (e) {
+        console.error('Cloud upload failed for', file.name, e);
+        errorDetails.push(`${file.name}: ${e?.message || String(e)}`);
+        failed++;
+      }
+    }
+    // Invalidate cache so next read fetches fresh data
+    delete state.photosCache[facilityId];
+  } else {
+    // ===== Local Mode (IndexedDB) - existing chunked storage =====
+    const photos = await getPhotosFor(facilityId);
+    for (const file of pdfs) {
+      if (file.size > MAX_PDF_SIZE) {
+        oversize++;
+        continue;
+      }
+      try {
+        const { dataUrl, thumbnail } = await processPDF(file);
+        const id = 'pdf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+        const chunkCount = await savePDFChunked(id, dataUrl);
+        if (!chunkCount) {
+          failed++;
+          errorDetails.push(`${file.name}: 청크 저장 실패 - ${lastStorageError || '원인 불명'}`);
+          continue;
+        }
+        photos.unshift({
+          id,
+          uploadedAt: new Date().toISOString(),
+          author: author || '익명',
+          desc,
+          filename: file.name,
+          thumbnail,
+          size: file.size,
+          chunkCount
+        });
+        success++;
+      } catch (e) {
+        console.error('Upload failed for', file.name, e);
+        errorDetails.push(`${file.name}: ${e?.message || String(e)}`);
+        failed++;
+      }
+    }
+    // Save local metadata
+    let saved = false;
+    for (let attempt = 0; attempt < 5 && !saved; attempt++) {
+      saved = await storageSet(KEY_PHOTOS_PREFIX + facilityId, photos, true);
+      if (!saved && photos.length > 0) {
+        const removed = photos.shift();
+        if (removed && removed.chunkCount) await deletePDFChunked(removed.id, removed.chunkCount);
+      }
+    }
+    if (!saved) showToast('메타데이터 저장 실패', true);
+    state.photosCache[facilityId] = photos;
+  }
+
+  await saveFacilities();
+  document.getElementById('upload-desc').value = '';
+
+  let msg = success ? `${success}개 업로드 완료` : '업로드 실패';
+  if (oversize) msg += ` · ${oversize}개 용량 초과 (30MB 초과)`;
+  if (failed) {
+    msg += ` · ${failed}개 처리 오류`;
+    if (errorDetails.length) {
+      msg += `\n\n원인: ${errorDetails[0]}`;
+      if (errorDetails.length > 1) msg += `\n(외 ${errorDetails.length - 1}건 - 콘솔 확인)`;
+    }
+  }
+  showToast(msg, success === 0, failed > 0);
+
+  await renderPhotosInModal(facilityId);
+  await renderFacilityList();
+  await renderMarkers();
+}
+
+async function deletePhoto(facilityId, photoId) {
+  if (CloudSync.enabled) {
+    if (!CloudSync.isAdmin) {
+      showToast('관리자 권한이 필요합니다', true);
+      return;
+    }
+    // Find chunkCount from cached metadata
+    const photos = await getPhotosFor(facilityId);
+    const target = photos.find(p => p.id === photoId);
+    const chunkCount = target?.chunkCount || 0;
+
+    try {
+      // Delete chunks first, then metadata
+      if (chunkCount > 0) {
+        await CloudSync.deletePDFChunkedFromCloud(photoId, chunkCount);
+      }
+      await CloudSync.deletePDFMeta(photoId);
+      delete state.photosCache[facilityId];
+    } catch (e) {
+      console.error('Cloud delete failed:', e);
+      showToast('삭제 실패: ' + (e?.message || e), true);
+      return;
+    }
+  } else {
+    let photos = await getPhotosFor(facilityId);
+    const target = photos.find(p => p.id === photoId);
+    if (target) {
+      await deletePDFChunked(photoId, target.chunkCount);
+    }
+    photos = photos.filter(p => p.id !== photoId);
+    await savePhotos(facilityId, photos);
+  }
+  await renderPhotosInModal(facilityId);
+  await renderFacilityList();
+  await renderMarkers();
+}
+
+// Delete all PDFs (and metadata) for a facility - used when deleting facilities/categories
+async function deleteAllPDFsFor(facilityId) {
+  const photos = await getPhotosFor(facilityId);
+  if (CloudSync.enabled) {
+    for (const p of photos) {
+      try {
+        if (p.chunkCount) {
+          await CloudSync.deletePDFChunkedFromCloud(p.id, p.chunkCount);
+        }
+        await CloudSync.deletePDFMeta(p.id);
+      } catch (e) {
+        console.error('Cloud delete failed for', p.id, e);
+      }
+    }
+  } else {
+    for (const p of photos) {
+      await deletePDFChunked(p.id, p.chunkCount);
+    }
+    await storageDelete(KEY_PHOTOS_PREFIX + facilityId, true);
+  }
+  delete state.photosCache[facilityId];
+}
+
+async function renderPhotosInModal(facilityId) {
+  const container = document.getElementById('photos-container');
+  const photos = await getPhotosFor(facilityId);
+  document.getElementById('photos-count').textContent = `${photos.length}개`;
+  if (!photos.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state__title">아직 등록된 PDF가 없습니다</div>
+        <div>위쪽 영역에 PDF 파일을 업로드하여 시작하세요</div>
+      </div>`;
+    return;
+  }
+  // Sort by upload time desc
+  const sorted = [...photos].sort((a, b) => {
+    return (b.uploadedAt || '').localeCompare(a.uploadedAt || '');
+  });
+  const grid = document.createElement('div');
+  grid.className = 'photos-grid';
+  for (const p of sorted) {
+    const card = document.createElement('div');
+    card.className = 'photo-card';
+    const thumb = p.thumbnail
+      ? `<img class="photo-card__img" src="${p.thumbnail}" alt="${escapeHtml(p.filename || '')}">`
+      : `<div class="photo-card__img photo-card__img--pdf">📄</div>`;
+    const sizeStr = p.size ? ` · ${formatSize(p.size)}` : '';
+    card.innerHTML = `
+      ${thumb}
+      <button class="photo-card__delete" data-pdf-id="${p.id}" title="삭제">×</button>
+      <div class="photo-card__meta">
+        <div class="photo-card__date mono">${formatDate(p.uploadedAt)}${sizeStr}</div>
+        <div class="photo-card__filename" title="${escapeHtml(p.filename || '')}">${escapeHtml(p.filename || '(제목 없음)')}</div>
+        ${p.desc ? `<div class="photo-card__desc">${escapeHtml(p.desc)}</div>` : ''}
+        ${p.author ? `<div class="photo-card__author">— ${escapeHtml(p.author)}</div>` : ''}
+      </div>
+    `;
+    // Quick delete button (does not open viewer)
+    card.querySelector('.photo-card__delete').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const fname = p.filename || '이 PDF';
+      if (confirm(`"${fname}"\n\n위 파일을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+        await deletePhoto(facilityId, p.id);
+      }
+    });
+    // Card click opens viewer
+    card.addEventListener('click', () => openLightbox(facilityId, p.id));
+    grid.appendChild(card);
+  }
+  container.innerHTML = '';
+  container.appendChild(grid);
+}
+
+// ==================== PDF VIEWER ====================
+const PDFViewer = {
+  pdfDoc: null,
+  currentPage: 1,
+  totalPages: 0,
+  scale: 1.0,
+  fitMode: 'width',           // 'width' | 'page' | 'custom'
+  rendering: false,
+  pendingRender: false,
+  renderTask: null,
+  blobUrl: null,              // for download fallback
+  currentMeta: null,          // { facilityId, pdfId, filename, ... }
+
+  async open(meta) {
+    this.currentMeta = meta;
+    this.currentPage = 1;
+    this.scale = 1.0;
+    this.fitMode = 'width';
+
+    document.getElementById('lightbox-filename').textContent = meta.filename || 'PDF';
+    document.getElementById('pdf-current-page').textContent = '—';
+    document.getElementById('pdf-total-pages').textContent = '—';
+
+    document.getElementById('lightbox').classList.add('is-open');
+    document.getElementById('pdf-loading').classList.add('is-show');
+    document.getElementById('pdf-canvas-wrap').innerHTML = '';
+
+    // Info strip
+    const info = [];
+    if (meta.uploadedAt) info.push(formatDate(meta.uploadedAt));
+    if (meta.size) info.push(formatSize(meta.size));
+    if (meta.author) info.push(meta.author);
+    if (meta.desc) info.push(meta.desc);
+    document.getElementById('pdf-meta-info').textContent = info.join(' · ');
+
+    try {
+      let bytes;
+
+      // Cloud mode: load chunked PDF from Firestore and reassemble
+      if (CloudSync.enabled && meta.chunkCount) {
+        const dataUrl = await CloudSync.loadPDFChunkedFromCloud(meta.pdfId, meta.chunkCount);
+        if (!dataUrl) throw new Error('PDF 청크를 가져올 수 없습니다');
+        const base64 = dataUrl.split(',')[1];
+        const binary = atob(base64);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      } else {
+        // Local mode: load from chunked IndexedDB storage
+        const dataUrl = await loadPDFChunked(meta.pdfId, meta.chunkCount);
+        if (!dataUrl) throw new Error('PDF 데이터를 찾을 수 없습니다');
+        const base64 = dataUrl.split(',')[1];
+        const binary = atob(base64);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      }
+
+      // Keep a Blob URL for the download button
+      if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+      this.blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+
+      // Cleanup previous PDF doc
+      if (this.pdfDoc) {
+        try { await this.pdfDoc.destroy(); } catch (_) {}
+        this.pdfDoc = null;
+      }
+
+      if (!window.pdfjsLib) throw new Error('PDF.js 라이브러리 로드 실패');
+
+      this.pdfDoc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+      this.totalPages = this.pdfDoc.numPages;
+      document.getElementById('pdf-total-pages').textContent = this.totalPages;
+
+      await this.render();
+    } catch (e) {
+      console.error('PDF open failed:', e);
+      document.getElementById('pdf-loading').classList.remove('is-show');
+      showToast('PDF 로드 실패: ' + (e?.message || e), true);
+    }
+  },
+
+  async close() {
+    document.getElementById('lightbox').classList.remove('is-open');
+    document.getElementById('pdf-canvas-wrap').innerHTML = '';
+
+    // Cancel any pending render
+    if (this.renderTask) {
+      try { this.renderTask.cancel(); } catch (_) {}
+      this.renderTask = null;
+    }
+    if (this.pdfDoc) {
+      try { await this.pdfDoc.destroy(); } catch (_) {}
+      this.pdfDoc = null;
+    }
+    if (this.blobUrl) {
+      URL.revokeObjectURL(this.blobUrl);
+      this.blobUrl = null;
+    }
+    this.currentMeta = null;
+  },
+
+  async render() {
+    if (!this.pdfDoc) return;
+    if (this.rendering) {
+      this.pendingRender = true;
+      return;
+    }
+    this.rendering = true;
+
+    try {
+      document.getElementById('pdf-loading').classList.add('is-show');
+
+      const page = await this.pdfDoc.getPage(this.currentPage);
+      const stage = document.getElementById('pdf-stage');
+      const wrap = document.getElementById('pdf-canvas-wrap');
+
+      // Compute scale based on fit mode
+      const baseViewport = page.getViewport({ scale: 1.0 });
+      const stageW = stage.clientWidth - 32;
+      const stageH = stage.clientHeight - 32;
+
+      if (this.fitMode === 'width') {
+        this.scale = stageW / baseViewport.width;
+      } else if (this.fitMode === 'page') {
+        this.scale = Math.min(stageW / baseViewport.width, stageH / baseViewport.height);
+      }
+      // 'custom' uses this.scale as-is
+
+      // High DPI rendering for crisp display
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap at 2x to limit memory
+      const viewport = page.getViewport({ scale: this.scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = Math.floor(viewport.width) + 'px';
+      canvas.style.height = Math.floor(viewport.height) + 'px';
+
+      const ctx = canvas.getContext('2d');
+      const renderViewport = page.getViewport({ scale: this.scale * dpr });
+
+      // Cancel any previous render
+      if (this.renderTask) {
+        try { this.renderTask.cancel(); } catch (_) {}
+      }
+
+      this.renderTask = page.render({ canvasContext: ctx, viewport: renderViewport });
+      await this.renderTask.promise;
+      this.renderTask = null;
+
+      // Swap canvas in
+      wrap.innerHTML = '';
+      wrap.appendChild(canvas);
+
+      // Scroll to top of stage on page change
+      stage.scrollTop = 0;
+      stage.scrollLeft = 0;
+
+      // Update UI
+      document.getElementById('pdf-current-page').textContent = this.currentPage;
+      document.getElementById('pdf-zoom-level').textContent = Math.round(this.scale * 100) + '%';
+      document.getElementById('pdf-prev').disabled = this.currentPage <= 1;
+      document.getElementById('pdf-next').disabled = this.currentPage >= this.totalPages;
+    } catch (e) {
+      if (e?.name !== 'RenderingCancelledException') {
+        console.error('PDF render failed:', e);
+      }
+    } finally {
+      document.getElementById('pdf-loading').classList.remove('is-show');
+      this.rendering = false;
+      if (this.pendingRender) {
+        this.pendingRender = false;
+        this.render();
+      }
+    }
+  },
+
+  prevPage() {
+    if (this.currentPage > 1) { this.currentPage--; this.render(); }
+  },
+  nextPage() {
+    if (this.currentPage < this.totalPages) { this.currentPage++; this.render(); }
+  },
+  zoomIn() {
+    this.fitMode = 'custom';
+    this.scale = Math.min(this.scale * 1.25, 5);
+    this.render();
+  },
+  zoomOut() {
+    this.fitMode = 'custom';
+    this.scale = Math.max(this.scale * 0.8, 0.25);
+    this.render();
+  },
+  fitWidth() {
+    this.fitMode = 'width';
+    this.render();
+  },
+  fitPage() {
+    this.fitMode = 'page';
+    this.render();
+  },
+
+  download() {
+    if (!this.blobUrl || !this.currentMeta) return;
+    const a = document.createElement('a');
+    a.href = this.blobUrl;
+    a.download = this.currentMeta.filename || 'document.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+};
+
+// ==================== LIGHTBOX (open/close wrappers around PDFViewer) ====================
+async function openLightbox(facilityId, pdfId) {
+  const photos = await getPhotosFor(facilityId);
+  const p = photos.find(x => x.id === pdfId);
+  if (!p) { showToast('PDF 정보를 찾을 수 없습니다', true); return; }
+  await PDFViewer.open({
+    facilityId,
+    pdfId,
+    chunkCount: p.chunkCount,
+    filename: p.filename,
+    uploadedAt: p.uploadedAt,
+    size: p.size,
+    author: p.author,
+    desc: p.desc
+  });
+}
+async function closeLightbox() {
+  await PDFViewer.close();
+}
+
+// ==================== MODALS ====================
+async function openPhotoModal(facilityId) {
+  const cat = state.facilities.find(c => c.facilities.some(f => f.id === facilityId));
+  if (!cat) return;
+  const f = cat.facilities.find(x => x.id === facilityId);
+  if (!f) return;
+
+  state.currentFacilityId = facilityId;
+  document.getElementById('photo-modal-num').textContent = f.num;
+  document.getElementById('photo-modal-name').textContent = f.name;
+  document.getElementById('photo-modal-cat').textContent = cat.num + ' · ' + cat.name;
+  document.getElementById('upload-author').value = state.userName || '';
+  document.getElementById('upload-desc').value = '';
+
+  await renderPhotosInModal(facilityId);
+  document.getElementById('photo-modal').classList.add('is-open');
+
+  // Highlight on map and pan
+  await renderMarkers();
+  await renderFacilityList();
+  map.panTo([f.lat, f.lng]);
+}
+
+function closeAllModals() {
+  document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('is-open'));
+  state.currentFacilityId = null;
+  state.currentEditing = null;
+  renderFacilityList();
+  renderMarkers();
+}
+
+// ==================== EDIT FACILITY ====================
+function openEditFacility(mode, payload) {
+  // mode: 'add-cat' | 'edit-cat' | 'add-fac' | 'edit-fac'
+  state.currentEditing = { mode, ...payload };
+  const titleEl = document.getElementById('edit-modal-title');
+  const numEl = document.getElementById('edit-num');
+  const nameEl = document.getElementById('edit-name');
+  const catEl = document.getElementById('edit-cat');
+  const catField = document.getElementById('edit-category-field');
+  const deleteBtn = document.getElementById('edit-delete');
+
+  numEl.value = ''; nameEl.value = ''; catEl.value = '';
+
+  if (mode === 'add-cat') {
+    titleEl.textContent = '카테고리 추가';
+    catField.style.display = 'none';
+    deleteBtn.style.display = 'none';
+    numEl.value = String(state.facilities.length + 1);
+  } else if (mode === 'edit-cat') {
+    titleEl.textContent = '카테고리 편집';
+    catField.style.display = 'none';
+    deleteBtn.style.display = '';
+    const cat = state.facilities.find(c => c.id === payload.catId);
+    if (cat) { numEl.value = cat.num; nameEl.value = cat.name; }
+  } else if (mode === 'add-fac') {
+    titleEl.textContent = '시설 추가';
+    catField.style.display = 'none';
+    deleteBtn.style.display = 'none';
+    const cat = state.facilities.find(c => c.id === payload.catId);
+    if (cat) {
+      const nextIdx = cat.facilities.length + 1;
+      numEl.value = `${cat.num}-${nextIdx}`;
+    }
+  } else if (mode === 'edit-fac') {
+    titleEl.textContent = '시설 편집';
+    catField.style.display = 'none';
+    deleteBtn.style.display = '';
+    for (const cat of state.facilities) {
+      const f = cat.facilities.find(x => x.id === payload.fid);
+      if (f) { numEl.value = f.num; nameEl.value = f.name; break; }
+    }
+  }
+
+  document.getElementById('edit-modal').classList.add('is-open');
+}
+
+async function saveEdit() {
+  const e = state.currentEditing;
+  if (!e) return;
+  const num = document.getElementById('edit-num').value.trim();
+  const name = document.getElementById('edit-name').value.trim();
+  if (!num || !name) {
+    showToast('번호와 시설명을 입력하세요', true);
+    return;
+  }
+
+  if (e.mode === 'add-cat') {
+    state.facilities.push({
+      id: 'cat-' + Date.now(),
+      num, name,
+      facilities: []
+    });
+  } else if (e.mode === 'edit-cat') {
+    const cat = state.facilities.find(c => c.id === e.catId);
+    if (cat) { cat.num = num; cat.name = name; }
+  } else if (e.mode === 'add-fac') {
+    const cat = state.facilities.find(c => c.id === e.catId);
+    if (cat) {
+      const center = map.getCenter();
+      cat.facilities.push({
+        id: 'f-' + Date.now(),
+        num, name,
+        lat: center.lat, lng: center.lng
+      });
+      showToast('지도 중앙에 추가됨. 마커를 드래그하여 위치 조정하세요.');
+    }
+  } else if (e.mode === 'edit-fac') {
+    for (const cat of state.facilities) {
+      const f = cat.facilities.find(x => x.id === e.fid);
+      if (f) { f.num = num; f.name = name; break; }
+    }
+  }
+
+  await saveFacilities();
+  closeAllModals();
+  await renderFacilityList();
+  await renderMarkers();
+}
+
+async function deleteEdit() {
+  const e = state.currentEditing;
+  if (!e) return;
+  if (e.mode === 'edit-cat') {
+    if (!confirm('이 카테고리와 하위 시설을 모두 삭제합니다. (등록된 PDF도 함께 삭제됩니다) 계속하시겠습니까?')) return;
+    const cat = state.facilities.find(c => c.id === e.catId);
+    if (cat) {
+      for (const f of cat.facilities) {
+        await deleteAllPDFsFor(f.id);
+      }
+    }
+    state.facilities = state.facilities.filter(c => c.id !== e.catId);
+  } else if (e.mode === 'edit-fac') {
+    if (!confirm('이 시설을 삭제합니다. (등록된 PDF도 함께 삭제됩니다) 계속하시겠습니까?')) return;
+    for (const cat of state.facilities) {
+      const idx = cat.facilities.findIndex(x => x.id === e.fid);
+      if (idx >= 0) {
+        await deleteAllPDFsFor(e.fid);
+        cat.facilities.splice(idx, 1);
+        break;
+      }
+    }
+  }
+  await saveFacilities();
+  closeAllModals();
+  await renderFacilityList();
+  await renderMarkers();
+}
+
+async function saveFacilities() {
+  state.mapConfig.lastUpdate = new Date().toISOString();
+
+  // Cloud mode: write to Firestore (admin only - silently fail for viewers)
+  if (CloudSync.enabled && CloudSync.isAdmin) {
+    try {
+      await CloudSync.setAppData({
+        facilities: state.facilities,
+        mapConfig: state.mapConfig
+      });
+    } catch (e) {
+      console.error('Cloud save failed:', e);
+      showToast('클라우드 저장 실패: ' + (e?.message || e), true);
+    }
+  }
+
+  // Always also save locally as cache/fallback
+  await storageSet(KEY_FACILITIES, state.facilities, true);
+  await storageSet(KEY_MAP_CONFIG, state.mapConfig, true);
+  updateLastUpdate();
+}
+
+function updateLastUpdate() {
+  const t = state.mapConfig.lastUpdate;
+  if (t) {
+    const d = new Date(t);
+    document.getElementById('last-update').textContent =
+      `최종 업데이트: ${d.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })}`;
+  } else {
+    document.getElementById('last-update').textContent = '최종 업데이트: —';
+  }
+}
+
+// ==================== EDIT MODE TOGGLE ====================
+function toggleEditMode() {
+  if (CloudSync.enabled && !CloudSync.isAdmin) {
+    showToast('편집 모드는 관리자만 사용할 수 있습니다. 로그인하세요.', true);
+    return;
+  }
+  state.isEditMode = !state.isEditMode;
+  document.getElementById('btn-edit').classList.toggle('is-active', state.isEditMode);
+  document.getElementById('edit-banner').classList.toggle('is-show', state.isEditMode);
+  renderFacilityList();
+  renderMarkers();
+  if (state.isEditMode) showToast('편집 모드 활성화됨');
+}
+
+// ==================== EVENTS ====================
+function bindEvents() {
+  // Topbar
+  document.getElementById('btn-edit').addEventListener('click', toggleEditMode);
+  document.getElementById('btn-locate').addEventListener('click', () => {
+    map.flyTo([state.mapConfig.lat, state.mapConfig.lng], state.mapConfig.zoom, { duration: 1.2 });
+  });
+  document.getElementById('btn-share').addEventListener('click', () => {
+    // Populate published URL display
+    document.getElementById('share-url-display').textContent = PUBLISHED_URL;
+    // Generate QR code via QR Server API (no library needed)
+    const encoded = encodeURIComponent(PUBLISHED_URL);
+    const qrImg = document.getElementById('share-qr-img');
+    qrImg.parentElement.classList.remove('is-error');
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&data=${encoded}`;
+    document.getElementById('share-modal').classList.add('is-open');
+  });
+
+  // Copy URL to clipboard
+  document.getElementById('share-url-copy').addEventListener('click', async () => {
+    const ok = await copyToClipboard(PUBLISHED_URL);
+    if (ok) {
+      showToast('✅ URL이 클립보드에 복사되었습니다');
+    } else {
+      showToast('복사 실패 - URL을 직접 선택해서 복사하세요', true);
+    }
+  });
+
+  // Open URL in new tab
+  document.getElementById('share-url-open').addEventListener('click', () => {
+    window.open(PUBLISHED_URL, '_blank', 'noopener');
+  });
+
+  // ========== AUTH BUTTON ==========
+  document.getElementById('btn-auth').addEventListener('click', async () => {
+    if (CloudSync.isAdmin) {
+      if (confirm('관리자에서 로그아웃하시겠습니까? 편집 권한이 사라집니다.')) {
+        try {
+          await CloudSync.signOutAdmin();
+          showToast('로그아웃되었습니다');
+        } catch (e) {
+          showToast('로그아웃 실패: ' + (e?.message || e), true);
+        }
+      }
+    } else {
+      document.getElementById('login-error').style.display = 'none';
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-password').value = '';
+      document.getElementById('login-modal').classList.add('is-open');
+      setTimeout(() => document.getElementById('login-email').focus(), 100);
+    }
+  });
+
+  // Login submit
+  document.getElementById('login-submit').addEventListener('click', async () => {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    if (!email || !password) {
+      errEl.textContent = '이메일과 비밀번호를 입력하세요.';
+      errEl.style.display = '';
+      return;
+    }
+    const submitBtn = document.getElementById('login-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '로그인 중...';
+    try {
+      await CloudSync.signInAdmin(email, password);
+      closeAllModals();
+      showToast('관리자로 로그인되었습니다');
+    } catch (e) {
+      let msg = e?.message || String(e);
+      if (e?.code === 'auth/invalid-credential' || e?.code === 'auth/wrong-password' || e?.code === 'auth/user-not-found') {
+        msg = '이메일 또는 비밀번호가 올바르지 않습니다.';
+      } else if (e?.code === 'auth/too-many-requests') {
+        msg = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.';
+      } else if (e?.code === 'auth/network-request-failed') {
+        msg = '네트워크 오류. 인터넷 연결을 확인하세요.';
+      }
+      errEl.textContent = msg;
+      errEl.style.display = '';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '로그인';
+    }
+  });
+
+  document.getElementById('login-password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('login-submit').click();
+  });
+
+  // ========== FIREBASE CONFIG MODAL ==========
+  document.getElementById('settings-firebase').addEventListener('click', () => {
+    closeAllModals();
+    openFirebaseModal();
+  });
+
+  document.getElementById('firebase-save').addEventListener('click', async () => {
+    const raw = document.getElementById('firebase-config-input').value.trim();
+    if (!raw) {
+      showToast('Firebase 설정값을 입력하세요', true);
+      return;
+    }
+    try {
+      let config;
+      try {
+        config = JSON.parse(raw);
+      } catch (e) {
+        // Try to extract object from JS-style declaration like "const firebaseConfig = {...}"
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) {
+          config = (new Function('return ' + match[0]))();
+        } else {
+          throw e;
+        }
+      }
+      if (!config.apiKey || !config.projectId) {
+        throw new Error('apiKey, projectId 등 필수 필드가 누락됨');
+      }
+      CloudSync.saveConfig(config);
+      showToast('저장 완료. 페이지를 다시 로드합니다...');
+      setTimeout(() => location.reload(), 1000);
+    } catch (e) {
+      showToast('파싱 실패: ' + (e?.message || e), true);
+    }
+  });
+
+  document.getElementById('firebase-clear').addEventListener('click', () => {
+    if (!confirm('Firebase 설정을 제거하면 로컬 모드로 전환됩니다. 클라우드 데이터는 그대로 유지되지만 이 브라우저에서는 동기화가 멈춥니다. 계속하시겠습니까?')) return;
+    CloudSync.clearConfig();
+    showToast('설정 제거됨. 페이지를 다시 로드합니다...');
+    setTimeout(() => location.reload(), 1000);
+  });
+
+  document.getElementById('btn-settings').addEventListener('click', () => {
+    document.getElementById('settings-lat').value = state.mapConfig.lat;
+    document.getElementById('settings-lng').value = state.mapConfig.lng;
+    document.getElementById('settings-zoom').value = state.mapConfig.zoom;
+    document.getElementById('settings-backend').textContent = SRFStorage.backendName;
+    // Firebase status indicator in settings
+    const fbStatus = document.getElementById('settings-firebase-status');
+    if (CloudSync.enabled) {
+      fbStatus.textContent = '✅ 활성';
+      fbStatus.style.color = 'var(--success)';
+    } else if (CloudSync.isConfigured()) {
+      fbStatus.textContent = '⚠️ 설정됨 / 연결 실패';
+      fbStatus.style.color = 'var(--danger)';
+    } else {
+      fbStatus.textContent = '미설정';
+      fbStatus.style.color = 'var(--ink-3)';
+    }
+    document.getElementById('settings-modal').classList.add('is-open');
+  });
+
+  function openFirebaseModal() {
+    const existingConfig = CloudSync.loadConfig();
+    const inputEl = document.getElementById('firebase-config-input');
+    inputEl.value = existingConfig ? JSON.stringify(existingConfig, null, 2) : '';
+    document.getElementById('firebase-clear').style.display =
+      (existingConfig && !CloudSync.isHardcoded()) ? '' : 'none';
+
+    const dot = document.getElementById('firebase-status-dot');
+    const text = document.getElementById('firebase-status-text');
+    if (CloudSync.enabled) {
+      dot.style.background = '#4ADE80';
+      let statusMsg = '<b>활성</b> · 실시간 동기화 작동 중';
+      if (CloudSync.isHardcoded()) {
+        statusMsg += ' · <span style="color:var(--accent);">코드에 하드코딩됨 (모든 사용자 자동 동기화)</span>';
+      } else {
+        statusMsg += ' · 이 브라우저에만 저장됨 (다른 사용자는 직접 입력 필요)';
+      }
+      if (CloudSync.isAdmin) statusMsg += ' · 관리자 로그인됨';
+      else statusMsg += ' · 읽기 전용 (로그인 필요)';
+      text.innerHTML = statusMsg;
+    } else if (CloudSync.isConfigured()) {
+      dot.style.background = '#FFA64C';
+      text.innerHTML = '<b>연결 실패</b> · ' + (CloudSync.initError || '설정 확인 필요');
+    } else {
+      dot.style.background = '#9CA3AF';
+      text.innerHTML = '<b>미설정</b> · 아래 단계를 따라 Firebase 프로젝트를 연결하세요';
+    }
+
+    // Disable input/save when hardcoded (read-only display)
+    if (CloudSync.isHardcoded()) {
+      inputEl.setAttribute('readonly', '');
+      inputEl.style.opacity = '0.6';
+      document.getElementById('firebase-save').style.display = 'none';
+    } else {
+      inputEl.removeAttribute('readonly');
+      inputEl.style.opacity = '';
+      document.getElementById('firebase-save').style.display = '';
+    }
+
+    document.getElementById('firebase-modal').classList.add('is-open');
+  }
+
+  // Export / Import
+  document.getElementById('settings-export').addEventListener('click', exportAllData);
+  document.getElementById('settings-import').addEventListener('click', () => {
+    document.getElementById('import-file-input').click();
+  });
+  document.getElementById('import-file-input').addEventListener('change', async (e) => {
+    if (e.target.files && e.target.files[0]) {
+      await importAllData(e.target.files[0]);
+      e.target.value = '';
+    }
+  });
+
+  // Modal close
+  document.querySelectorAll('[data-close]').forEach(el => {
+    el.addEventListener('click', closeAllModals);
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target === el) closeAllModals();
+    });
+  });
+
+  // Settings
+  document.getElementById('settings-capture').addEventListener('click', () => {
+    const c = map.getCenter();
+    document.getElementById('settings-lat').value = c.lat.toFixed(6);
+    document.getElementById('settings-lng').value = c.lng.toFixed(6);
+    document.getElementById('settings-zoom').value = map.getZoom();
+    showToast('현재 지도 위치 캡처됨');
+  });
+  document.getElementById('settings-modal').addEventListener('click', async (e) => {
+    if (e.target === document.getElementById('settings-modal')) {
+      // Save settings on close
+      const lat = parseFloat(document.getElementById('settings-lat').value);
+      const lng = parseFloat(document.getElementById('settings-lng').value);
+      const zoom = parseInt(document.getElementById('settings-zoom').value, 10);
+      if (!isNaN(lat) && !isNaN(lng) && !isNaN(zoom)) {
+        state.mapConfig = { ...state.mapConfig, lat, lng, zoom };
+        await storageSet(KEY_MAP_CONFIG, state.mapConfig, true);
+      }
+    }
+  });
+  document.getElementById('settings-reset').addEventListener('click', async () => {
+    if (!confirm('시설 정보를 기본값으로 초기화합니다. (등록된 PDF는 유지됩니다) 계속하시겠습니까?')) return;
+    state.facilities = structuredClone(DEFAULT_FACILITIES);
+    state.mapConfig = { ...DEFAULT_CENTER, configVersion: CONFIG_VERSION };
+    await storageSet(KEY_FACILITIES, state.facilities, true);
+    await storageSet(KEY_MAP_CONFIG, state.mapConfig, true);
+    closeAllModals();
+    map.setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], DEFAULT_CENTER.zoom);
+    await renderFacilityList();
+    await renderMarkers();
+    showToast('초기화 완료');
+  });
+
+  // Facility list - delegate
+  document.getElementById('facility-list').addEventListener('click', (e) => {
+    const editFac = e.target.closest('[data-edit-fac]');
+    const deleteFac = e.target.closest('[data-delete-fac]');
+    const editCat = e.target.closest('[data-edit-cat]');
+    const deleteCat = e.target.closest('[data-delete-cat]');
+    const addFac = e.target.closest('[data-add-fac]');
+    const addCat = e.target.closest('#add-cat-btn');
+
+    if (editFac) { e.stopPropagation(); openEditFacility('edit-fac', { fid: editFac.dataset.editFac }); }
+    else if (deleteFac) {
+      e.stopPropagation();
+      openEditFacility('edit-fac', { fid: deleteFac.dataset.deleteFac });
+      // Auto-trigger delete after small delay so user sees what's being deleted
+      setTimeout(() => deleteEdit(), 0);
+    }
+    else if (editCat) { e.stopPropagation(); openEditFacility('edit-cat', { catId: editCat.dataset.editCat }); }
+    else if (deleteCat) {
+      e.stopPropagation();
+      openEditFacility('edit-cat', { catId: deleteCat.dataset.deleteCat });
+      setTimeout(() => deleteEdit(), 0);
+    }
+    else if (addFac) { e.stopPropagation(); openEditFacility('add-fac', { catId: addFac.dataset.addFac }); }
+    else if (addCat) { e.stopPropagation(); openEditFacility('add-cat', {}); }
+  });
+
+  // Edit modal
+  document.getElementById('edit-save').addEventListener('click', saveEdit);
+  document.getElementById('edit-delete').addEventListener('click', deleteEdit);
+
+  // Upload zone
+  const uploadZone = document.getElementById('upload-zone');
+  const uploadInput = document.getElementById('upload-input');
+  uploadZone.addEventListener('click', () => uploadInput.click());
+  uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('is-drag'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('is-drag'));
+  uploadZone.addEventListener('drop', async (e) => {
+    e.preventDefault(); uploadZone.classList.remove('is-drag');
+    if (state.currentFacilityId && e.dataTransfer.files.length) {
+      await uploadPhotos(state.currentFacilityId, Array.from(e.dataTransfer.files));
+    }
+  });
+  uploadInput.addEventListener('change', async (e) => {
+    if (state.currentFacilityId && e.target.files.length) {
+      await uploadPhotos(state.currentFacilityId, Array.from(e.target.files));
+      e.target.value = '';
+    }
+  });
+
+  // ==================== PDF VIEWER CONTROLS ====================
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+
+  document.getElementById('lightbox-delete').addEventListener('click', async () => {
+    if (PDFViewer.currentMeta && confirm('이 PDF를 삭제하시겠습니까?')) {
+      const { facilityId, pdfId } = PDFViewer.currentMeta;
+      await closeLightbox();
+      await deletePhoto(facilityId, pdfId);
+    }
+  });
+
+  document.getElementById('lightbox-download').addEventListener('click', () => {
+    PDFViewer.download();
+  });
+
+  // Page navigation
+  document.getElementById('pdf-prev').addEventListener('click', () => PDFViewer.prevPage());
+  document.getElementById('pdf-next').addEventListener('click', () => PDFViewer.nextPage());
+
+  // Zoom controls
+  document.getElementById('pdf-zoom-in').addEventListener('click', () => PDFViewer.zoomIn());
+  document.getElementById('pdf-zoom-out').addEventListener('click', () => PDFViewer.zoomOut());
+  document.getElementById('pdf-fit-width').addEventListener('click', () => PDFViewer.fitWidth());
+  document.getElementById('pdf-fit-page').addEventListener('click', () => PDFViewer.fitPage());
+
+  // Re-render on window resize (when in fit mode)
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    if (!document.getElementById('lightbox').classList.contains('is-open')) return;
+    if (PDFViewer.fitMode === 'custom') return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => PDFViewer.render(), 200);
+  });
+
+  // Touch gestures (swipe to navigate pages)
+  const stage = document.getElementById('pdf-stage');
+  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+  let isMultiTouch = false;
+
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) { isMultiTouch = true; return; }
+    isMultiTouch = false;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  stage.addEventListener('touchend', (e) => {
+    if (isMultiTouch || e.changedTouches.length === 0) { isMultiTouch = false; return; }
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+    // Horizontal swipe: must be fast, mostly horizontal, and significant
+    if (dt < 600 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      // Only swipe-navigate when not zoomed past stage width
+      const canvas = stage.querySelector('canvas');
+      if (canvas && canvas.offsetWidth <= stage.clientWidth + 8) {
+        if (dx < 0) PDFViewer.nextPage();
+        else PDFViewer.prevPage();
+      }
+    }
+  }, { passive: true });
+
+  // Keyboard shortcuts (only when viewer is open)
+  document.addEventListener('keydown', (e) => {
+    if (!document.getElementById('lightbox').classList.contains('is-open')) return;
+    switch (e.key) {
+      case 'ArrowLeft': case 'PageUp':
+        e.preventDefault(); PDFViewer.prevPage(); break;
+      case 'ArrowRight': case 'PageDown': case ' ':
+        e.preventDefault(); PDFViewer.nextPage(); break;
+      case '+': case '=':
+        e.preventDefault(); PDFViewer.zoomIn(); break;
+      case '-': case '_':
+        e.preventDefault(); PDFViewer.zoomOut(); break;
+      case '0':
+        e.preventDefault(); PDFViewer.fitWidth(); break;
+    }
+  });
+
+  // ESC to close
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('lightbox').classList.contains('is-open')) {
+        closeLightbox();
+      } else {
+        closeAllModals();
+      }
+    }
+  });
+}
+
+// ==================== UTILS ====================
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  return String(iso).slice(0, 10); // YYYY-MM-DD
+}
+
+function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + 'KB';
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+
+// Copy text to clipboard with fallback for older browsers / non-HTTPS contexts
+async function copyToClipboard(text) {
+  // Modern Clipboard API (HTTPS only)
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) { /* fall through */ }
+  }
+  // Fallback: temporary textarea + execCommand
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function showToast(msg, isError, longDuration) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.toggle('is-error', !!isError);
+  t.classList.add('is-show');
+  clearTimeout(t._timer);
+  const duration = longDuration ? 9000 : (isError ? 4000 : 2400);
+  t._timer = setTimeout(() => t.classList.remove('is-show'), duration);
+}
+
+// Polyfill for older browsers
+if (!window.structuredClone) {
+  window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+}
+
+// Boot
+init().catch(err => {
+  console.error(err);
+  document.getElementById('loading').innerHTML =
+    `<div style="text-align:center; padding:20px;"><div style="font-size:14px; color:#B83A2A; margin-bottom:8px;">초기화 오류</div><div style="font-size:11px; color:#6B7079; font-family:monospace;">${escapeHtml(err.message || err)}</div></div>`;
+});
+</script>
+
+</body>
+</html>
